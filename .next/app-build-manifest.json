@@ -47,6 +47,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/customers/page.js"
+    ],
+    "/dashboard/invoices/create/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/invoices/create/page.js"
     ]
   }
 }
