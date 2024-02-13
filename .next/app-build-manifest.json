@@ -11,30 +11,42 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/layout.js"
     ],
-    "/dashboard/invoices/error": [
+    "/dashboard/(overview)/loading": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/invoices/error.js"
+      "static/chunks/app/dashboard/(overview)/loading.js"
     ],
-    "/dashboard/invoices/create/page": [
+    "/dashboard/(overview)/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/invoices/create/page.js"
+      "static/chunks/app/dashboard/(overview)/page.js"
+    ],
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/page.css",
+      "static/chunks/app/page.js"
+    ],
+    "/login/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/login/page.css",
+      "static/chunks/app/login/page.js"
     ],
     "/dashboard/invoices/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/invoices/page.js"
     ],
-    "/dashboard/invoices/[id]/edit/page": [
+    "/dashboard/invoices/error": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/invoices/[id]/edit/page.js"
+      "static/chunks/app/dashboard/invoices/error.js"
     ],
-    "/dashboard/invoices/[id]/edit/not-found": [
+    "/dashboard/customers/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/invoices/[id]/edit/not-found.js"
+      "static/chunks/app/dashboard/customers/page.js"
     ]
   }
 }
