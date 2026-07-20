@@ -1,11 +1,8 @@
 {
-  "sortedMiddleware": [
-    "/"
-  ],
+  "version": 3,
   "middleware": {
     "/": {
       "files": [
-        "prerender-manifest.js",
         "server/edge-runtime-webpack.js",
         "server/middleware.js"
       ],
@@ -13,14 +10,20 @@
       "page": "/",
       "matchers": [
         {
-          "regexp": "^(?:\\/(_next\\/data\\/[^/]{1,}))?(?:\\/((?!api|_next\\/static|_next\\/image|.*\\.png$).*))(.json)?[\\/#\\?]?$",
-          "originalSource": "/((?!api|_next/static|_next/image|.*\\.png$).*)"
+          "regexp": "^/.*$",
+          "originalSource": "/:path*"
         }
       ],
       "wasm": [],
-      "assets": []
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "development",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "Un5f/1HWbcxZtJegN+Ch9xkw1sqnfekOroQmEXGMVQo="
+      }
     }
   },
   "functions": {},
-  "version": 2
+  "sortedMiddleware": [
+    "/"
+  ]
 }
