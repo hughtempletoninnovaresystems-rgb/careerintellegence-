@@ -7,6 +7,10 @@
 node_modules/
 dist/
 
+# next
+/.next/
+/out/
+
 # Compiled Java class files
 *.class
 
