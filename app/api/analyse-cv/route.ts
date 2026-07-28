@@ -84,9 +84,27 @@ ${text}
       },
     });
 
-    const result = JSON.parse(response.text ?? "{}");
+    let result;
 
-    return NextResponse.json(result);
+    try {
+      const clean = (response.text ?? "")
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+      result = JSON.parse(clean);
+
+    } catch (error) {
+      console.error("Gemini returned:", response.text);
+
+      return NextResponse.json(
+        {
+          error: "AI did not return valid JSON",
+          raw: response.text,
+        },
+        { status: 500 }
+      );
+    }
 
   } catch (err) {
     console.error("========== ANALYSE CV ERROR ==========");
