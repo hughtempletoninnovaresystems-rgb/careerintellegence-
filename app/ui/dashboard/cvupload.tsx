@@ -19,14 +19,19 @@ export default function UploadCV() {
         body: formData,
       });
 
-      const data = await res.json();
+      const text = await res.text();
 
-      if (!res.ok) {
+      console.log("API RESPONSE:", text);
+
+      try {
+        const data = JSON.parse(text);
         setResult(data);
-        return;
+      } catch {
+        setResult({
+          error: text,
+        });
       }
-
-      setResult(data);
+      
     } catch (err) {
       console.error(err);
 
