@@ -13,7 +13,7 @@ export interface User {
   image?: string | null;
 }
 
-export const getUser = async (
+const getUser = async (
   email?: string | null
 ) => {
   if (!email) {

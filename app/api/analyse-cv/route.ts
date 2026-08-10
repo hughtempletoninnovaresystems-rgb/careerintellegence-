@@ -8,7 +8,7 @@ import { auth } from "@/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const getUser = async (
+const getUser = async (
   email?: string | null
 ) => {
   if (!email) {
