@@ -37,13 +37,30 @@ import { useMemo, useState } from "react";
  * 9. UI advances to next role.
  * 10. Repeat until all roles are complete.
  *
+ * CV PROCESSING JOURNEY
+ * ---------------------
+ * The upload screen now displays:
+ *
+ *   - 0–100% progress bar
+ *   - current processing activity
+ *   - completed processing steps with ticks
+ *   - Knowledge Base matching as a distinct step
+ *   - AI interpretation/enrichment as a distinct step
+ *
  * IMPORTANT
  * ---------
- * This front-end requires the API to support the contract
- * represented by the types and actions below.
+ * The current API returns one response when CV processing completes.
+ * Therefore the progress indicator represents the client-side
+ * processing journey rather than genuine server-side percentage
+ * progress.
  *
- * The existing single-role backend will therefore need to be
- * extended to support:
+ * The UI is deliberately structured so that these stages can later
+ * be driven by real backend progress events without redesigning
+ * the component.
+ *
+ * API CONTRACT
+ * ------------
+ * The existing single-role backend will need to support:
  *
  *   analyse_cv_roles
  *   assess_role
@@ -284,10 +301,11 @@ function confidencePercent(
   );
 }
 
-
-
 type EntryPath = "cv" | "manual";
-type ProcessingOrder = "latest_first" | "earliest_first";
+
+type ProcessingOrder =
+  | "latest_first"
+  | "earliest_first";
 
 type ManualRoleInput = {
   organisationName: string;
@@ -299,15 +317,57 @@ type ManualRoleInput = {
   employmentContext: string;
 };
 
-const blankManualRole = (): ManualRoleInput => ({
-  organisationName: "",
-  roleTitle: "",
-  fromDate: "",
-  toDate: "",
-  roleDescription: "",
-  engagementModel: "",
-  employmentContext: "",
-});
+const blankManualRole =
+  (): ManualRoleInput => ({
+    organisationName: "",
+    roleTitle: "",
+    fromDate: "",
+    toDate: "",
+    roleDescription: "",
+    engagementModel: "",
+    employmentContext: "",
+  });
+
+/* ============================================================
+   CV PROCESSING STEPS
+============================================================ */
+
+type CVProcessingStep = {
+  id: string;
+  label: string;
+};
+
+const CV_PROCESSING_STEPS:
+  CVProcessingStep[] = [
+    {
+      id: "upload",
+      label: "Uploading CV",
+    },
+    {
+      id: "extract",
+      label: "Extracting CV content",
+    },
+    {
+      id: "roles",
+      label:
+        "Identifying roles, organisations and dates",
+    },
+    {
+      id: "knowledge_base",
+      label:
+        "Matching evidence against the Capability Knowledge Base",
+    },
+    {
+      id: "ai",
+      label:
+        "Using AI to interpret and enrich the evidence",
+    },
+    {
+      id: "prepare",
+      label:
+        "Preparing role-by-role capability review",
+    },
+  ];
 
 /* ============================================================
    COMPONENT
@@ -315,16 +375,31 @@ const blankManualRole = (): ManualRoleInput => ({
 
 export default function CareerIntelligenceJourney() {
   const [entryPath, setEntryPath] =
-    useState<EntryPath | null>(null);
+    useState<EntryPath | null>(
+      null
+    );
 
-  const [processingOrder, setProcessingOrder] =
-    useState<ProcessingOrder>("latest_first");
+  const [
+    processingOrder,
+    setProcessingOrder,
+  ] =
+    useState<ProcessingOrder>(
+      "latest_first"
+    );
 
-  const [manualCandidateName, setManualCandidateName] =
+  const [
+    manualCandidateName,
+    setManualCandidateName,
+  ] =
     useState("");
 
-  const [manualRoles, setManualRoles] =
-    useState<ManualRoleInput[]>([blankManualRole()]);
+  const [
+    manualRoles,
+    setManualRoles,
+  ] =
+    useState<ManualRoleInput[]>([
+      blankManualRole(),
+    ]);
 
   const activeEndpoint =
     entryPath === "manual"
@@ -335,57 +410,106 @@ export default function CareerIntelligenceJourney() {
      CV JOURNEY STATE
   ------------------------------------------------------------ */
 
-  const [candidateName, setCandidateName] =
-    useState("");
+  const [
+    candidateName,
+    setCandidateName,
+  ] = useState("");
 
-  const [assessmentId, setAssessmentId] =
-    useState<string | null>(null);
+  const [
+    assessmentId,
+    setAssessmentId,
+  ] = useState<string | null>(
+    null
+  );
 
-  const [roles, setRoles] =
-    useState<RoleContext[]>([]);
+  const [
+    roles,
+    setRoles,
+  ] = useState<RoleContext[]>(
+    []
+  );
 
-  const [currentRoleIndex, setCurrentRoleIndex] =
-    useState(0);
+  const [
+    currentRoleIndex,
+    setCurrentRoleIndex,
+  ] = useState(0);
+
+  /* ------------------------------------------------------------
+     CV PROCESSING PROGRESS
+  ------------------------------------------------------------ */
+
+  const [
+    cvProgress,
+    setCvProgress,
+  ] = useState(0);
+
+  const [
+    cvProcessingStep,
+    setCvProcessingStep,
+  ] = useState(0);
 
   /* ------------------------------------------------------------
      PAGE / REQUEST STATE
   ------------------------------------------------------------ */
 
-  const [loading, setLoading] =
-    useState(false);
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
-  const [assessing, setAssessing] =
-    useState(false);
+  const [
+    assessing,
+    setAssessing,
+  ] = useState(false);
 
-  const [savingRole, setSavingRole] =
-    useState(false);
+  const [
+    savingRole,
+    setSavingRole,
+  ] = useState(false);
 
-  const [submittingRole, setSubmittingRole] =
-    useState(false);
+  const [
+    submittingRole,
+    setSubmittingRole,
+  ] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(
+    null
+  );
 
-  const [message, setMessage] =
-    useState<string | null>(null);
+  const [
+    message,
+    setMessage,
+  ] = useState<string | null>(
+    null
+  );
 
   /* ------------------------------------------------------------
      CLARIFICATION ANSWERS
   ------------------------------------------------------------ */
 
-  const [answers, setAnswers] =
-    useState<
-      Record<string, string>
-    >({});
+  const [
+    answers,
+    setAnswers,
+  ] = useState<
+    Record<string, string>
+  >({});
 
   /* ------------------------------------------------------------
      ROLE CONTEXT EDITING
   ------------------------------------------------------------ */
 
-  const [editingRole, setEditingRole] =
-    useState(false);
+  const [
+    editingRole,
+    setEditingRole,
+  ] = useState(false);
 
-  const [roleDraft, setRoleDraft] =
+  const [
+    roleDraft,
+    setRoleDraft,
+  ] =
     useState<RoleContext | null>(
       null
     );
@@ -394,18 +518,28 @@ export default function CareerIntelligenceJourney() {
      CAPABILITY EDITING
   ------------------------------------------------------------ */
 
-  const [editingCapabilityId, setEditingCapabilityId] =
+  const [
+    editingCapabilityId,
+    setEditingCapabilityId,
+  ] =
     useState<string | null>(
       null
     );
 
-  const [editCapabilityName, setEditCapabilityName] =
-    useState("");
+  const [
+    editCapabilityName,
+    setEditCapabilityName,
+  ] = useState("");
 
-  const [editEvidence, setEditEvidence] =
-    useState("");
+  const [
+    editEvidence,
+    setEditEvidence,
+  ] = useState("");
 
-  const [savingCapabilityId, setSavingCapabilityId] =
+  const [
+    savingCapabilityId,
+    setSavingCapabilityId,
+  ] =
     useState<string | null>(
       null
     );
@@ -513,12 +647,13 @@ export default function CareerIntelligenceJourney() {
     );
   }
 
-
   /* ============================================================
      ENTRY PATH / MANUAL ROLE ENTRY
   ============================================================ */
 
-  function choosePath(path: EntryPath) {
+  function choosePath(
+    path: EntryPath
+  ) {
     setEntryPath(path);
     setError(null);
     setMessage(null);
@@ -531,34 +666,50 @@ export default function CareerIntelligenceJourney() {
     field: keyof ManualRoleInput,
     value: string
   ) {
-    setManualRoles((previous) =>
-      previous.map((role, i) =>
-        i === index ? { ...role, [field]: value } : role
-      )
+    setManualRoles(
+      (previous) =>
+        previous.map(
+          (role, i) =>
+            i === index
+              ? {
+                  ...role,
+                  [field]: value,
+                }
+              : role
+        )
     );
   }
 
   function addManualRole() {
-    setManualRoles((previous) => [
-      ...previous,
-      blankManualRole(),
-    ]);
+    setManualRoles(
+      (previous) => [
+        ...previous,
+        blankManualRole(),
+      ]
+    );
   }
 
-  function removeManualRole(index: number) {
-    setManualRoles((previous) =>
-      previous.length === 1
-        ? previous
-        : previous.filter((_, i) => i !== index)
+  function removeManualRole(
+    index: number
+  ) {
+    setManualRoles(
+      (previous) =>
+        previous.length === 1
+          ? previous
+          : previous.filter(
+              (_, i) =>
+                i !== index
+            )
     );
   }
 
   async function startManualJourney() {
-    const incomplete = manualRoles.some(
-      (role) =>
-        !role.organisationName.trim() ||
-        !role.roleTitle.trim()
-    );
+    const incomplete =
+      manualRoles.some(
+        (role) =>
+          !role.organisationName.trim() ||
+          !role.roleTitle.trim()
+      );
 
     if (incomplete) {
       setError(
@@ -573,53 +724,90 @@ export default function CareerIntelligenceJourney() {
 
     try {
       const orderedRoles =
-        processingOrder === "latest_first"
+        processingOrder ===
+        "latest_first"
           ? [...manualRoles]
           : [...manualRoles].reverse();
 
-      const response = await fetch(NO_CV_ROUTE_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "start_manual",
-          candidateName: manualCandidateName,
-          processingOrder,
-          roles: orderedRoles,
-        }),
-      });
+      const response =
+        await fetch(
+          NO_CV_ROUTE_ENDPOINT,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action:
+                "start_manual",
+              candidateName:
+                manualCandidateName,
+              processingOrder,
+              roles: orderedRoles,
+            }),
+          }
+        );
 
-      const text = await response.text();
-      let data: CVAnalysisResponse;
+      const text =
+        await response.text();
+
+      let data:
+        CVAnalysisResponse;
 
       try {
-        data = JSON.parse(text);
+        data =
+          JSON.parse(text);
       } catch {
         throw new Error(
-          text || "The server returned an invalid manual-role response."
+          text ||
+            "The server returned an invalid manual-role response."
         );
       }
 
-      if (!response.ok || data.error) {
+      if (
+        !response.ok ||
+        data.error
+      ) {
         throw new Error(
-          data.error || "Manual role assessment could not be started."
+          data.error ||
+            "Manual role assessment could not be started."
         );
       }
 
-      const preparedRoles = Array.isArray(data.roles)
-        ? data.roles
-        : [];
+      const preparedRoles =
+        Array.isArray(data.roles)
+          ? data.roles
+          : [];
 
-      if (!preparedRoles.length) {
-        throw new Error("No roles were prepared for assessment.");
+      if (
+        !preparedRoles.length
+      ) {
+        throw new Error(
+          "No roles were prepared for assessment."
+        );
       }
 
-      setCandidateName(data.candidateName || manualCandidateName);
-      setAssessmentId(data.assessmentId || null);
-      setRoles(preparedRoles);
+      setCandidateName(
+        data.candidateName ||
+          manualCandidateName
+      );
+
+      setAssessmentId(
+        data.assessmentId ||
+          null
+      );
+
+      setRoles(
+        preparedRoles
+      );
+
       setCurrentRoleIndex(0);
-      setMessage(data.message || "Manual role assessment started.");
+
+      setMessage(
+        data.message ||
+          "Manual role assessment started."
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -650,7 +838,19 @@ export default function CareerIntelligenceJourney() {
     setAnswers({});
     setEditingRole(false);
     setRoleDraft(null);
-    setEditingCapabilityId(null);
+    setEditingCapabilityId(
+      null
+    );
+
+    /*
+     * Start visual CV-processing journey.
+     */
+    setCvProgress(0);
+    setCvProcessingStep(0);
+
+    let progressTimer:
+      ReturnType<typeof setInterval> | null =
+      null;
 
     try {
       const formData =
@@ -661,15 +861,71 @@ export default function CareerIntelligenceJourney() {
         file
       );
 
-      /*
-       * Optional explicit action.
-       * Backend can ignore this if multipart
-       * already maps directly to CV analysis.
-       */
       formData.append(
         "action",
         "analyse_cv_roles"
       );
+
+      /*
+       * The existing API returns a single response
+       * after processing. The timer therefore provides
+       * a meaningful visual representation of the
+       * processing stages without pretending that the
+       * percentage is a backend measurement.
+       *
+       * It will never exceed 90% until the server has
+       * actually returned successfully.
+       */
+      progressTimer =
+        setInterval(() => {
+          setCvProgress(
+            (previous) => {
+              if (
+                previous >= 90
+              ) {
+                return previous;
+              }
+
+              const next =
+                Math.min(
+                  previous + 3,
+                  90
+                );
+
+              /*
+               * Six stages are mapped across the
+               * available 0–90% processing window.
+               */
+              const stage =
+                Math.min(
+                  CV_PROCESSING_STEPS.length -
+                    1,
+                  Math.floor(
+                    (
+                      next /
+                      90
+                    ) *
+                    (
+                      CV_PROCESSING_STEPS.length -
+                      1
+                    )
+                  )
+                );
+
+              setCvProcessingStep(
+                stage
+              );
+
+              return next;
+            }
+          );
+        }, 350);
+
+      /*
+       * STEP 1
+       */
+      setCvProcessingStep(0);
+      setCvProgress(5);
 
       const response =
         await fetch(
@@ -680,8 +936,20 @@ export default function CareerIntelligenceJourney() {
           }
         );
 
+      /*
+       * STEP 2
+       */
+      setCvProcessingStep(1);
+      setCvProgress(25);
+
       const text =
         await response.text();
+
+      /*
+       * STEP 3
+       */
+      setCvProcessingStep(2);
+      setCvProgress(45);
 
       let data:
         CVAnalysisResponse;
@@ -692,7 +960,7 @@ export default function CareerIntelligenceJourney() {
       } catch {
         throw new Error(
           text ||
-          "The server returned an invalid CV analysis response."
+            "The server returned an invalid CV analysis response."
         );
       }
 
@@ -702,7 +970,7 @@ export default function CareerIntelligenceJourney() {
       ) {
         throw new Error(
           data.error ||
-          "CV analysis failed."
+            "CV analysis failed."
         );
       }
 
@@ -720,14 +988,39 @@ export default function CareerIntelligenceJourney() {
         );
       }
 
+      /*
+       * STEP 4
+       * Capability Knowledge Base matching.
+       */
+      setCvProcessingStep(3);
+      setCvProgress(65);
+
+      /*
+       * STEP 5
+       * AI interpretation/enrichment.
+       *
+       * This represents the processing stage returned
+       * by the current API. It is deliberately shown as
+       * a separate stage from Knowledge Base matching.
+       */
+      setCvProcessingStep(4);
+      setCvProgress(82);
+
+      /*
+       * STEP 6
+       * Prepare role-by-role workspace.
+       */
+      setCvProcessingStep(5);
+      setCvProgress(95);
+
       setCandidateName(
         data.candidateName ||
-        ""
+          ""
       );
 
       setAssessmentId(
         data.assessmentId ||
-        null
+          null
       );
 
       setRoles(
@@ -735,6 +1028,20 @@ export default function CareerIntelligenceJourney() {
       );
 
       setCurrentRoleIndex(0);
+
+      /*
+       * Processing is genuinely complete because
+       * the API response has been received and the
+       * roles have been placed into the workspace.
+       */
+      setCvProgress(100);
+
+      /*
+       * 6 means every processing step is complete.
+       */
+      setCvProcessingStep(
+        CV_PROCESSING_STEPS.length
+      );
 
       setMessage(
         `CV analysed. ${discoveredRoles.length} role${
@@ -745,12 +1052,27 @@ export default function CareerIntelligenceJourney() {
         } identified.`
       );
     } catch (err) {
+      if (progressTimer) {
+        clearInterval(
+          progressTimer
+        );
+      }
+
+      setCvProgress(0);
+      setCvProcessingStep(0);
+
       setError(
         err instanceof Error
           ? err.message
           : "Unknown CV analysis error."
       );
     } finally {
+      if (progressTimer) {
+        clearInterval(
+          progressTimer
+        );
+      }
+
       setLoading(false);
     }
   }
@@ -903,7 +1225,7 @@ export default function CareerIntelligenceJourney() {
       } catch {
         throw new Error(
           text ||
-          "The server returned an invalid role update response."
+            "The server returned an invalid role update response."
         );
       }
 
@@ -913,12 +1235,13 @@ export default function CareerIntelligenceJourney() {
       ) {
         throw new Error(
           data.error ||
-          "Role details could not be updated."
+            "Role details could not be updated."
         );
       }
 
       const savedRole =
-        data.role || roleDraft;
+        data.role ||
+        roleDraft;
 
       updateRoleLocally(
         currentRole
@@ -1117,7 +1440,7 @@ export default function CareerIntelligenceJourney() {
       } catch {
         throw new Error(
           text ||
-          "The server returned an invalid role assessment response."
+            "The server returned an invalid role assessment response."
         );
       }
 
@@ -1127,22 +1450,9 @@ export default function CareerIntelligenceJourney() {
       ) {
         throw new Error(
           data.error ||
-          "Role assessment failed."
+            "Role assessment failed."
         );
       }
-
-      /*
-       * IMPORTANT LOOP:
-       *
-       * The backend may return:
-       *
-       * - demonstrated / emerging capabilities
-       * - remaining gaps
-       * - NEW clarification questions
-       *
-       * The role stays current until all of those
-       * are resolved.
-       */
 
       updateRoleLocally(
         currentRole
@@ -1156,7 +1466,7 @@ export default function CareerIntelligenceJourney() {
                 .stagedCapabilities,
               data
                 .stagedCapabilities ||
-              []
+                []
             ),
 
           gaps:
@@ -1175,10 +1485,6 @@ export default function CareerIntelligenceJourney() {
         })
       );
 
-      /*
-       * Clear only the answers for the questions
-       * that have just been submitted.
-       */
       setAnswers({});
 
       if (
@@ -1187,12 +1493,12 @@ export default function CareerIntelligenceJourney() {
       ) {
         setMessage(
           data.message ||
-          "Additional capability evidence has emerged. Further clarification is required before this role can be completed."
+            "Additional capability evidence has emerged. Further clarification is required before this role can be completed."
         );
       } else {
         setMessage(
           data.message ||
-          "Clarification complete. Review the capability evidence for this role."
+            "Clarification complete. Review the capability evidence for this role."
         );
       }
     } catch (err) {
@@ -1221,15 +1527,15 @@ export default function CareerIntelligenceJourney() {
     setEditCapabilityName(
       capability
         .editedCompetencyName ||
-      capability
-        .proposedCompetencyName
+        capability
+          .proposedCompetencyName
     );
 
     setEditEvidence(
       capability
         .editedEvidence ??
-      capability.evidence ??
-      ""
+        capability.evidence ??
+        ""
     );
 
     setError(null);
@@ -1240,9 +1546,7 @@ export default function CareerIntelligenceJourney() {
       null
     );
 
-    setEditCapabilityName(
-      ""
-    );
+    setEditCapabilityName("");
 
     setEditEvidence("");
   }
@@ -1285,13 +1589,13 @@ export default function CareerIntelligenceJourney() {
 
         competencyName:
           reviewStatus ===
-            "edited"
+          "edited"
             ? competencyName
             : undefined,
 
         evidence:
           reviewStatus ===
-            "edited"
+          "edited"
             ? evidence
             : undefined,
       };
@@ -1326,7 +1630,7 @@ export default function CareerIntelligenceJourney() {
       } catch {
         throw new Error(
           text ||
-          "The server returned an invalid capability review response."
+            "The server returned an invalid capability review response."
         );
       }
 
@@ -1337,7 +1641,7 @@ export default function CareerIntelligenceJourney() {
       ) {
         throw new Error(
           data.error ||
-          "The capability review could not be saved."
+            "The capability review could not be saved."
         );
       }
 
@@ -1353,7 +1657,8 @@ export default function CareerIntelligenceJourney() {
               .map(
                 (item) =>
                   item.id ===
-                  data.capability
+                  data
+                    .capability
                     ?.id
                     ? data
                         .capability!
@@ -1458,7 +1763,7 @@ export default function CareerIntelligenceJourney() {
       } catch {
         throw new Error(
           text ||
-          "The server returned an invalid role submission response."
+            "The server returned an invalid role submission response."
         );
       }
 
@@ -1468,27 +1773,9 @@ export default function CareerIntelligenceJourney() {
       ) {
         throw new Error(
           data.error ||
-          "The role could not be submitted."
+            "The role could not be submitted."
         );
       }
-
-      /*
-       * CRITICAL BUSINESS RULE
-       * ----------------------
-       *
-       * Submission is itself an evaluation point.
-       *
-       * The backend may discover:
-       *
-       * - emerging capabilities
-       * - new evidence
-       * - additional gaps
-       * - further clarification requirements
-       *
-       * If so, the role is NOT complete.
-       *
-       * The candidate goes around the same role loop again.
-       */
 
       const emerging =
         data
@@ -1502,13 +1789,13 @@ export default function CareerIntelligenceJourney() {
         Boolean(
           data
             .requiresFurtherClarification ||
-          nextGaps.length >
-            0 ||
-          emerging.some(
-            (item) =>
-              item.reviewStatus ===
-              "proposed"
-          )
+            nextGaps.length >
+              0 ||
+            emerging.some(
+              (item) =>
+                item.reviewStatus ===
+                "proposed"
+            )
         );
 
       if (requiresLoop) {
@@ -1540,15 +1827,12 @@ export default function CareerIntelligenceJourney() {
 
         setMessage(
           data.message ||
-          "Submission identified additional capability intelligence. Review the new evidence and complete any further clarification before resubmitting this role."
+            "Submission identified additional capability intelligence. Review the new evidence and complete any further clarification before resubmitting this role."
         );
 
         return;
       }
 
-      /*
-       * Successful role completion.
-       */
       updateRoleLocally(
         currentRole
           .roleAssessmentId,
@@ -1562,23 +1846,32 @@ export default function CareerIntelligenceJourney() {
         })
       );
 
-      /*
-       * Advance automatically to the next role.
-       */
       if (
         currentRoleIndex <
         roles.length - 1
       ) {
         const nextIndex =
-          currentRoleIndex + 1;
+          currentRoleIndex +
+          1;
 
-        setRoles((previous) =>
-          previous.map((role, index) =>
-            index === nextIndex &&
-            role.lifecycleStatus === "not_started"
-              ? { ...role, lifecycleStatus: "in_progress" }
-              : role
-          )
+        setRoles(
+          (previous) =>
+            previous.map(
+              (
+                role,
+                index
+              ) =>
+                index ===
+                  nextIndex &&
+                role.lifecycleStatus ===
+                  "not_started"
+                  ? {
+                      ...role,
+                      lifecycleStatus:
+                        "in_progress",
+                    }
+                  : role
+            )
         );
 
         setCurrentRoleIndex(
@@ -1594,12 +1887,12 @@ export default function CareerIntelligenceJourney() {
 
         setMessage(
           data.message ||
-          "Role completed. The next role is now ready for review."
+            "Role completed. The next role is now ready for review."
         );
       } else {
         setMessage(
           data.message ||
-          "Final role completed."
+            "Final role completed."
         );
       }
     } catch (err) {
@@ -1615,8 +1908,6 @@ export default function CareerIntelligenceJourney() {
 
   /* ============================================================
      ROLE NAVIGATION
-     Only completed roles can be revisited without disturbing
-     the active role sequence.
   ============================================================ */
 
   function selectRole(
@@ -1629,10 +1920,6 @@ export default function CareerIntelligenceJourney() {
       return;
     }
 
-    /*
-     * The candidate may revisit previous completed roles.
-     * They cannot skip ahead over unfinished roles.
-     */
     if (
       index >
       currentRoleIndex
@@ -1669,252 +1956,611 @@ export default function CareerIntelligenceJourney() {
           ENTRY PATH
       ======================================================== */}
 
-      {!entryPath && roles.length === 0 && (
-        <div className="rounded-lg border bg-white p-6">
-          <h2 className="text-xl font-semibold">
-            Do you have a CV to upload?
-          </h2>
+      {!entryPath &&
+        roles.length === 0 && (
+          <div className="rounded-lg border bg-white p-6">
 
-          <p className="mt-2 text-slate-600">
-            Choose how you would like to build your career history.
-            Both routes join the same role-by-role capability review process.
-          </p>
+            <h2 className="text-xl font-semibold">
+              Do you have a CV to upload?
+            </h2>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => choosePath("cv")}
-              className="rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white"
-            >
-              Yes — upload CV
-            </button>
+            <p className="mt-2 text-slate-600">
+              Choose how you would like to
+              build your career history.
+              Both routes join the same
+              role-by-role capability review
+              process.
+            </p>
 
-            <button
-              type="button"
-              onClick={() => choosePath("manual")}
-              className="rounded-lg border border-slate-300 px-6 py-3 font-semibold"
-            >
-              No — enter roles manually
-            </button>
+            <div className="mt-5 flex flex-wrap gap-3">
+
+              <button
+                type="button"
+                onClick={() =>
+                  choosePath("cv")
+                }
+                className="rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white"
+              >
+                Yes — upload CV
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  choosePath("manual")
+                }
+                className="rounded-lg border border-slate-300 px-6 py-3 font-semibold"
+              >
+                No — enter roles manually
+              </button>
+
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* ========================================================
           CV UPLOAD
       ======================================================== */}
 
-      {entryPath === "cv" && roles.length === 0 && (
-        <div className="rounded-lg border bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Upload CV</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                All identifiable roles, organisations, dates and role-specific
-                capability evidence will be extracted.
-              </p>
+      {entryPath === "cv" &&
+        roles.length === 0 && (
+          <div className="rounded-lg border bg-white p-5">
+
+            <div className="flex items-start justify-between gap-4">
+
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Upload CV
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  All identifiable roles,
+                  organisations, dates and
+                  role-specific capability
+                  evidence will be extracted.
+                </p>
+              </div>
+
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEntryPath(null)
+                  }
+                  className="text-sm font-medium text-slate-600"
+                >
+                  Change
+                </button>
+              )}
+
             </div>
-            <button
-              type="button"
-              onClick={() => setEntryPath(null)}
-              className="text-sm font-medium text-slate-600"
-            >
-              Change
-            </button>
+
+            {!loading && (
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                disabled={loading}
+                onChange={(event) => {
+                  const file =
+                    event.target.files?.[0];
+
+                  if (file) {
+                    upload(file);
+                  }
+                }}
+                className="mt-5 block w-full text-sm"
+              />
+            )}
+
+            {/* ==================================================
+                CV PROCESSING PROGRESS
+            ================================================== */}
+
+            {loading && (
+              <div className="mt-6 rounded-lg border bg-slate-50 p-5">
+
+                <div className="flex items-center justify-between gap-4">
+
+                  <div>
+                    <p className="font-semibold text-slate-800">
+                      Analysing your CV
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Please wait while GIAS
+                      processes your career
+                      history.
+                    </p>
+                  </div>
+
+                  <p className="text-lg font-bold text-slate-900">
+                    {cvProgress}%
+                  </p>
+
+                </div>
+
+                {/* ==================================================
+                    PROGRESS BAR
+                ================================================== */}
+
+                <div
+                  className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-200"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={cvProgress}
+                  aria-label="CV processing progress"
+                >
+
+                  <div
+                    className="h-full rounded-full bg-slate-900 transition-all duration-300 ease-out"
+                    style={{
+                      width:
+                        `${cvProgress}%`,
+                    }}
+                  />
+
+                </div>
+
+                {/* ==================================================
+                    CURRENT PROCESS
+                ================================================== */}
+
+                <p className="mt-3 text-sm font-medium text-slate-700">
+                  {cvProcessingStep >=
+                  CV_PROCESSING_STEPS.length
+                    ? "CV processing complete"
+                    : CV_PROCESSING_STEPS[
+                        cvProcessingStep
+                      ]?.label ||
+                      "Preparing your career review..."}
+                </p>
+
+                {/* ==================================================
+                    PROCESSING STEPS
+                ================================================== */}
+
+                <div className="mt-5 space-y-3">
+
+                  {CV_PROCESSING_STEPS.map(
+                    (
+                      step,
+                      index
+                    ) => {
+
+                      const complete =
+                        index <
+                        cvProcessingStep;
+
+                      const active =
+                        index ===
+                        cvProcessingStep &&
+                        cvProcessingStep <
+                          CV_PROCESSING_STEPS.length;
+
+                      return (
+                        <div
+                          key={step.id}
+                          className={`flex items-center gap-3 rounded-lg p-3 ${
+                            active
+                              ? "bg-white"
+                              : complete
+                                ? "bg-white"
+                                : "bg-slate-100/70"
+                          }`}
+                        >
+
+                          {/* STATUS ICON */}
+
+                          <div
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                              complete
+                                ? "bg-green-600 text-white"
+                                : active
+                                  ? "border-2 border-slate-900 bg-white text-slate-900"
+                                  : "border border-slate-300 bg-white text-slate-400"
+                            }`}
+                          >
+
+                            {complete ? (
+                              <span aria-hidden="true">
+                                ✓
+                              </span>
+                            ) : (
+                              <span>
+                                {index + 1}
+                              </span>
+                            )}
+
+                          </div>
+
+                          {/* PROCESS DESCRIPTION */}
+
+                          <div className="flex-1">
+
+                            <p
+                              className={`text-sm ${
+                                complete
+                                  ? "font-semibold text-green-700"
+                                  : active
+                                    ? "font-semibold text-slate-900"
+                                    : "text-slate-500"
+                              }`}
+                            >
+                              {step.label}
+                            </p>
+
+                            {active && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                Processing...
+                              </p>
+                            )}
+
+                            {complete && (
+                              <p className="mt-1 text-xs text-green-600">
+                                Complete
+                              </p>
+                            )}
+
+                          </div>
+
+                        </div>
+                      );
+                    }
+                  )}
+
+                </div>
+
+              </div>
+            )}
+
           </div>
-
-          <input
-            type="file"
-            accept=".pdf,.docx"
-            disabled={loading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) upload(file);
-            }}
-            className="mt-5 block w-full text-sm"
-          />
-
-          {loading && (
-            <div className="mt-4 rounded-lg bg-slate-50 p-4">
-              <p className="font-medium text-slate-700">Analysing CV...</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Identifying roles, organisations, dates, capability evidence
-                and areas requiring clarification.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
       {/* ========================================================
           MANUAL ROLE ENTRY
       ======================================================== */}
 
-      {entryPath === "manual" && roles.length === 0 && (
-        <div className="rounded-lg border bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Enter career roles</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Enter each role in most-recent-to-oldest order. You can choose
-                below whether the assessment starts with the latest or earliest role.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEntryPath(null)}
-              className="text-sm font-medium text-slate-600"
-            >
-              Change
-            </button>
-          </div>
+      {entryPath === "manual" &&
+        roles.length === 0 && (
+          <div className="rounded-lg border bg-white p-5">
 
-          <label className="mt-5 block text-sm font-medium">
-            Candidate name (optional)
-            <input
-              type="text"
-              value={manualCandidateName}
-              onChange={(e) => setManualCandidateName(e.target.value)}
-              className="mt-1 w-full rounded-lg border p-3 font-normal"
-            />
-          </label>
+            <div className="flex items-start justify-between gap-4">
 
-          <div className="mt-5 rounded-lg bg-slate-50 p-4">
-            <p className="text-sm font-semibold">Where should we start?</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={processingOrder === "latest_first"}
-                  onChange={() => setProcessingOrder("latest_first")}
-                />
-                Start with latest role
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={processingOrder === "earliest_first"}
-                  onChange={() => setProcessingOrder("earliest_first")}
-                />
-                Start with earliest role
-              </label>
-            </div>
-          </div>
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Enter career roles
+                </h2>
 
-          <div className="mt-6 space-y-5">
-            {manualRoles.map((role, index) => (
-              <div key={index} className="rounded-lg border p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <h3 className="font-semibold">Role {index + 1}</h3>
-                  {manualRoles.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeManualRole(index)}
-                      className="text-sm font-medium text-red-700"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <label className="text-sm font-medium">
-                    Organisation / business name
-                    <input
-                      type="text"
-                      value={role.organisationName}
-                      onChange={(e) => updateManualRole(index, "organisationName", e.target.value)}
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-
-                  <label className="text-sm font-medium">
-                    Role title
-                    <input
-                      type="text"
-                      value={role.roleTitle}
-                      onChange={(e) => updateManualRole(index, "roleTitle", e.target.value)}
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-
-                  <label className="text-sm font-medium">
-                    From date
-                    <input
-                      type="text"
-                      value={role.fromDate}
-                      onChange={(e) => updateManualRole(index, "fromDate", e.target.value)}
-                      placeholder="e.g. Jun 2015"
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-
-                  <label className="text-sm font-medium">
-                    To date
-                    <input
-                      type="text"
-                      value={role.toDate}
-                      onChange={(e) => updateManualRole(index, "toDate", e.target.value)}
-                      placeholder="e.g. Feb 2022 or Present"
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-
-                  <label className="text-sm font-medium">
-                    Engagement model (optional)
-                    <input
-                      type="text"
-                      value={role.engagementModel}
-                      onChange={(e) => updateManualRole(index, "engagementModel", e.target.value)}
-                      placeholder="Employee, Contractor, Freelance..."
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-
-                  <label className="text-sm font-medium">
-                    Employment / working context (optional)
-                    <input
-                      type="text"
-                      value={role.employmentContext}
-                      onChange={(e) => updateManualRole(index, "employmentContext", e.target.value)}
-                      className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    />
-                  </label>
-                </div>
-
-                <label className="mt-4 block text-sm font-medium">
-                  Brief role description (optional)
-                  <textarea
-                    value={role.roleDescription}
-                    onChange={(e) => updateManualRole(index, "roleDescription", e.target.value)}
-                    rows={4}
-                    className="mt-1 w-full rounded-lg border p-3 font-normal"
-                    placeholder="Briefly describe responsibilities or leave blank and GIAS will ask evidence-seeking questions."
-                  />
-                </label>
+                <p className="mt-1 text-sm text-slate-500">
+                  Enter each role in
+                  most-recent-to-oldest order.
+                  You can choose below whether
+                  the assessment starts with the
+                  latest or earliest role.
+                </p>
               </div>
-            ))}
-          </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={addManualRole}
-              className="rounded-lg border px-4 py-2 text-sm font-semibold"
-            >
-              Add another role
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={startManualJourney}
-              className="rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
-            >
-              {loading ? "Preparing roles..." : "Start assessment"}
-            </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setEntryPath(null)
+                }
+                className="text-sm font-medium text-slate-600"
+              >
+                Change
+              </button>
+
+            </div>
+
+            <label className="mt-5 block text-sm font-medium">
+
+              Candidate name (optional)
+
+              <input
+                type="text"
+                value={
+                  manualCandidateName
+                }
+                onChange={(e) =>
+                  setManualCandidateName(
+                    e.target.value
+                  )
+                }
+                className="mt-1 w-full rounded-lg border p-3 font-normal"
+              />
+
+            </label>
+
+            <div className="mt-5 rounded-lg bg-slate-50 p-4">
+
+              <p className="text-sm font-semibold">
+                Where should we start?
+              </p>
+
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
+
+                <label className="flex items-center gap-2">
+
+                  <input
+                    type="radio"
+                    checked={
+                      processingOrder ===
+                      "latest_first"
+                    }
+                    onChange={() =>
+                      setProcessingOrder(
+                        "latest_first"
+                      )
+                    }
+                  />
+
+                  Start with latest role
+
+                </label>
+
+                <label className="flex items-center gap-2">
+
+                  <input
+                    type="radio"
+                    checked={
+                      processingOrder ===
+                      "earliest_first"
+                    }
+                    onChange={() =>
+                      setProcessingOrder(
+                        "earliest_first"
+                      )
+                    }
+                  />
+
+                  Start with earliest role
+
+                </label>
+
+              </div>
+
+            </div>
+
+            <div className="mt-6 space-y-5">
+
+              {manualRoles.map(
+                (
+                  role,
+                  index
+                ) => (
+
+                  <div
+                    key={index}
+                    className="rounded-lg border p-5"
+                  >
+
+                    <div className="flex items-center justify-between gap-4">
+
+                      <h3 className="font-semibold">
+                        Role {index + 1}
+                      </h3>
+
+                      {manualRoles.length >
+                        1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeManualRole(
+                              index
+                            )
+                          }
+                          className="text-sm font-medium text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+
+                    </div>
+
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+
+                      <label className="text-sm font-medium">
+
+                        Organisation /
+                        business name
+
+                        <input
+                          type="text"
+                          value={
+                            role.organisationName
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "organisationName",
+                              e.target
+                                .value
+                            )
+                          }
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                      <label className="text-sm font-medium">
+
+                        Role title
+
+                        <input
+                          type="text"
+                          value={
+                            role.roleTitle
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "roleTitle",
+                              e.target
+                                .value
+                            )
+                          }
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                      <label className="text-sm font-medium">
+
+                        From date
+
+                        <input
+                          type="text"
+                          value={
+                            role.fromDate
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "fromDate",
+                              e.target
+                                .value
+                            )
+                          }
+                          placeholder="e.g. Jun 2015"
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                      <label className="text-sm font-medium">
+
+                        To date
+
+                        <input
+                          type="text"
+                          value={
+                            role.toDate
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "toDate",
+                              e.target
+                                .value
+                            )
+                          }
+                          placeholder="e.g. Feb 2022 or Present"
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                      <label className="text-sm font-medium">
+
+                        Engagement model
+                        (optional)
+
+                        <input
+                          type="text"
+                          value={
+                            role.engagementModel
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "engagementModel",
+                              e.target
+                                .value
+                            )
+                          }
+                          placeholder="Employee, Contractor, Freelance..."
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                      <label className="text-sm font-medium">
+
+                        Employment /
+                        working context
+                        (optional)
+
+                        <input
+                          type="text"
+                          value={
+                            role.employmentContext
+                          }
+                          onChange={(e) =>
+                            updateManualRole(
+                              index,
+                              "employmentContext",
+                              e.target
+                                .value
+                            )
+                          }
+                          className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        />
+
+                      </label>
+
+                    </div>
+
+                    <label className="mt-4 block text-sm font-medium">
+
+                      Brief role description
+                      (optional)
+
+                      <textarea
+                        value={
+                          role.roleDescription
+                        }
+                        onChange={(e) =>
+                          updateManualRole(
+                            index,
+                            "roleDescription",
+                            e.target
+                              .value
+                          )
+                        }
+                        rows={4}
+                        className="mt-1 w-full rounded-lg border p-3 font-normal"
+                        placeholder="Briefly describe responsibilities or leave blank and GIAS will ask evidence-seeking questions."
+                      />
+
+                    </label>
+
+                  </div>
+
+                )
+              )}
+
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+
+              <button
+                type="button"
+                onClick={
+                  addManualRole
+                }
+                className="rounded-lg border px-4 py-2 text-sm font-semibold"
+              >
+                Add another role
+              </button>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={
+                  startManualJourney
+                }
+                className="rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white disabled:opacity-50"
+              >
+                {loading
+                  ? "Preparing roles..."
+                  : "Start assessment"}
+              </button>
+
+            </div>
+
           </div>
-        </div>
-      )}
+        )}
 
       {/* ========================================================
           GLOBAL ERROR / MESSAGE
@@ -1954,17 +2600,21 @@ export default function CareerIntelligenceJourney() {
               <div className="flex items-center justify-between gap-4">
 
                 <p className="font-medium">
-                  Role {currentRoleIndex + 1} of{" "}
+                  Role{" "}
+                  {currentRoleIndex + 1}{" "}
+                  of{" "}
                   {totalRoles}
                 </p>
 
                 <p className="text-sm text-slate-500">
-                  {completedRoles} completed
+                  {completedRoles}{" "}
+                  completed
                 </p>
 
               </div>
 
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+
                 <div
                   className="h-full bg-slate-900"
                   style={{
@@ -1973,10 +2623,12 @@ export default function CareerIntelligenceJourney() {
                         (
                           completedRoles /
                           totalRoles
-                        ) * 100
+                        ) *
+                          100
                       )}%`,
                   }}
                 />
+
               </div>
 
             </div>
@@ -1988,7 +2640,11 @@ export default function CareerIntelligenceJourney() {
           <div className="mt-5 flex flex-wrap gap-2">
 
             {roles.map(
-              (role, index) => {
+              (
+                role,
+                index
+              ) => {
+
                 const isCurrent =
                   index ===
                   currentRoleIndex;
@@ -2043,6 +2699,7 @@ export default function CareerIntelligenceJourney() {
             <div className="flex items-start justify-between gap-4">
 
               <div>
+
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Role under review
                 </p>
@@ -2067,6 +2724,7 @@ export default function CareerIntelligenceJourney() {
                     )
                   }
                 </p>
+
               </div>
 
               {currentRole.lifecycleStatus !==
@@ -2131,183 +2789,211 @@ export default function CareerIntelligenceJourney() {
 
           {editingRole &&
             roleDraft && (
-            <div className="mt-5 rounded-lg border bg-slate-50 p-5">
+              <div className="mt-5 rounded-lg border bg-slate-50 p-5">
 
-              <h3 className="font-semibold">
-                Edit role details
-              </h3>
+                <h3 className="font-semibold">
+                  Edit role details
+                </h3>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
 
-                <label className="text-sm font-medium">
-                  Organisation
-                  <input
-                    type="text"
+                  <label className="text-sm font-medium">
+
+                    Organisation
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .organisationName
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "organisationName",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                  <label className="text-sm font-medium">
+
+                    Role title
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .roleTitle
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "roleTitle",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                  <label className="text-sm font-medium">
+
+                    From
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .fromDate ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "fromDate",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                  <label className="text-sm font-medium">
+
+                    To
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .toDate ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "toDate",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                  <label className="text-sm font-medium">
+
+                    Engagement model
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .engagementModel ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "engagementModel",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                  <label className="text-sm font-medium">
+
+                    Employment context
+
+                    <input
+                      type="text"
+                      value={
+                        roleDraft
+                          .employmentContext ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateRoleDraft(
+                          "employmentContext",
+                          e.target
+                            .value
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
+                    />
+
+                  </label>
+
+                </div>
+
+                <label className="mt-4 block text-sm font-medium">
+
+                  Role description
+
+                  <textarea
                     value={
                       roleDraft
-                        .organisationName
-                    }
-                    onChange={(e) =>
-                      updateRoleDraft(
-                        "organisationName",
-                        e.target.value
-                      )
-                    }
-                    className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                  />
-                </label>
-
-                <label className="text-sm font-medium">
-                  Role title
-                  <input
-                    type="text"
-                    value={
-                      roleDraft
-                        .roleTitle
-                    }
-                    onChange={(e) =>
-                      updateRoleDraft(
-                        "roleTitle",
-                        e.target.value
-                      )
-                    }
-                    className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                  />
-                </label>
-
-                <label className="text-sm font-medium">
-                  From
-                  <input
-                    type="text"
-                    value={
-                      roleDraft
-                        .fromDate ||
+                        .roleDescription ||
                       ""
                     }
                     onChange={(e) =>
                       updateRoleDraft(
-                        "fromDate",
-                        e.target.value
+                        "roleDescription",
+                        e.target
+                          .value
                       )
                     }
+                    rows={5}
                     className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
                   />
+
                 </label>
 
-                <label className="text-sm font-medium">
-                  To
-                  <input
-                    type="text"
-                    value={
-                      roleDraft
-                        .toDate ||
-                      ""
-                    }
-                    onChange={(e) =>
-                      updateRoleDraft(
-                        "toDate",
-                        e.target.value
-                      )
-                    }
-                    className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                  />
-                </label>
+                <div className="mt-4 flex gap-3">
 
-                <label className="text-sm font-medium">
-                  Engagement model
-                  <input
-                    type="text"
-                    value={
-                      roleDraft
-                        .engagementModel ||
-                      ""
+                  <button
+                    type="button"
+                    disabled={
+                      savingRole
                     }
-                    onChange={(e) =>
-                      updateRoleDraft(
-                        "engagementModel",
-                        e.target.value
-                      )
+                    onClick={
+                      saveRoleContext
                     }
-                    className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                  />
-                </label>
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {
+                      savingRole
+                        ? "Saving..."
+                        : "Save role"
+                    }
+                  </button>
 
-                <label className="text-sm font-medium">
-                  Employment context
-                  <input
-                    type="text"
-                    value={
-                      roleDraft
-                        .employmentContext ||
-                      ""
+                  <button
+                    type="button"
+                    disabled={
+                      savingRole
                     }
-                    onChange={(e) =>
-                      updateRoleDraft(
-                        "employmentContext",
-                        e.target.value
-                      )
+                    onClick={
+                      cancelRoleEdit
                     }
-                    className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                  />
-                </label>
+                    className="rounded-lg border px-4 py-2 text-sm font-semibold"
+                  >
+                    Cancel
+                  </button>
+
+                </div>
 
               </div>
-
-              <label className="mt-4 block text-sm font-medium">
-                Role description
-                <textarea
-                  value={
-                    roleDraft
-                      .roleDescription ||
-                    ""
-                  }
-                  onChange={(e) =>
-                    updateRoleDraft(
-                      "roleDescription",
-                      e.target.value
-                    )
-                  }
-                  rows={5}
-                  className="mt-1 w-full rounded-lg border bg-white p-3 font-normal"
-                />
-              </label>
-
-              <div className="mt-4 flex gap-3">
-
-                <button
-                  type="button"
-                  disabled={
-                    savingRole
-                  }
-                  onClick={
-                    saveRoleContext
-                  }
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {
-                    savingRole
-                      ? "Saving..."
-                      : "Save role"
-                  }
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    savingRole
-                  }
-                  onClick={
-                    cancelRoleEdit
-                  }
-                  className="rounded-lg border px-4 py-2 text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-
-              </div>
-
-            </div>
-          )}
+            )}
 
           {/* ====================================================
               CLARIFICATION LOOP
@@ -2341,6 +3027,7 @@ export default function CareerIntelligenceJourney() {
                     gap,
                     index
                   ) => {
+
                     const key =
                       answerKey(
                         gap,
@@ -2365,12 +3052,14 @@ export default function CareerIntelligenceJourney() {
                         </p>
 
                         <div className="mt-4 rounded-lg bg-slate-50 p-4">
+
                           <p className="font-medium">
                             {
                               gap
                                 .question
                             }
                           </p>
+
                         </div>
 
                         <textarea
@@ -2450,7 +3139,10 @@ export default function CareerIntelligenceJourney() {
               <div className="mt-5 space-y-5">
 
                 {currentReviewableCapabilities.map(
-                  (capability) => {
+                  (
+                    capability
+                  ) => {
+
                     const editing =
                       editingCapabilityId ===
                       capability.id;
@@ -2488,8 +3180,11 @@ export default function CareerIntelligenceJourney() {
 
                         {editing ? (
                           <>
+
                             <label className="block text-sm font-medium">
+
                               Capability
+
                               <input
                                 type="text"
                                 value={
@@ -2503,10 +3198,13 @@ export default function CareerIntelligenceJourney() {
                                 }
                                 className="mt-1 w-full rounded-lg border p-3 font-normal"
                               />
+
                             </label>
 
                             <label className="mt-4 block text-sm font-medium">
+
                               Evidence
+
                               <textarea
                                 value={
                                   editEvidence
@@ -2520,6 +3218,7 @@ export default function CareerIntelligenceJourney() {
                                 rows={5}
                                 className="mt-1 w-full rounded-lg border p-3 font-normal"
                               />
+
                             </label>
 
                             <div className="mt-4 flex gap-3">
@@ -2528,7 +3227,7 @@ export default function CareerIntelligenceJourney() {
                                 type="button"
                                 disabled={
                                   savingCapabilityId ===
-                                  capability.id ||
+                                    capability.id ||
                                   !editCapabilityName.trim()
                                 }
                                 onClick={() =>
@@ -2555,12 +3254,15 @@ export default function CareerIntelligenceJourney() {
                               </button>
 
                             </div>
+
                           </>
                         ) : (
                           <>
+
                             <div className="flex items-start justify-between gap-4">
 
                               <div>
+
                                 <h4 className="font-semibold">
                                   {
                                     displayedName
@@ -2568,20 +3270,25 @@ export default function CareerIntelligenceJourney() {
                                 </h4>
 
                                 <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
+
                                   {
                                     capability
                                       .sourceType
                                   }
+
                                   {
                                     capability
                                       .sourceSection
                                       ? ` · ${capability.sourceSection}`
                                       : ""
                                   }
+
                                 </p>
+
                               </div>
 
                               <div className="text-right">
+
                                 <p className="text-sm font-medium text-slate-500">
                                   {
                                     confidencePercent(
@@ -2598,17 +3305,20 @@ export default function CareerIntelligenceJourney() {
                                       .reviewStatus
                                   }
                                 </p>
+
                               </div>
 
                             </div>
 
                             {displayedEvidence && (
                               <div className="mt-4 rounded-lg bg-slate-50 p-4">
+
                                 <p className="text-sm text-slate-700">
                                   {
                                     displayedEvidence
                                   }
                                 </p>
+
                               </div>
                             )}
 
@@ -2661,6 +3371,7 @@ export default function CareerIntelligenceJourney() {
                               </button>
 
                             </div>
+
                           </>
                         )}
 
@@ -2696,11 +3407,15 @@ export default function CareerIntelligenceJourney() {
               <div className="mt-4 space-y-3">
 
                 {currentConfirmedGaps.map(
-                  (gap) => (
+                  (
+                    gap
+                  ) => (
+
                     <div
                       key={gap.id}
                       className="rounded-lg border bg-amber-50 p-4"
                     >
+
                       <p className="font-semibold text-amber-900">
                         {
                           gap
@@ -2716,7 +3431,9 @@ export default function CareerIntelligenceJourney() {
                           }
                         </p>
                       )}
+
                     </div>
+
                   )
                 )}
 
@@ -2733,77 +3450,85 @@ export default function CareerIntelligenceJourney() {
             "completed" &&
             currentRole.lifecycleStatus !==
               "submitted" && (
-            <div className="mt-8 rounded-lg border bg-slate-50 p-5">
+              <div className="mt-8 rounded-lg border bg-slate-50 p-5">
 
-              <h3 className="text-lg font-semibold">
-                Complete this role
-              </h3>
+                <h3 className="text-lg font-semibold">
+                  Complete this role
+                </h3>
 
-              {currentRole.gaps.length >
-                0 && (
-                <p className="mt-2 text-sm text-amber-700">
+                {currentRole.gaps.length >
+                  0 && (
+                  <p className="mt-2 text-sm text-amber-700">
+
+                    {
+                      currentRole
+                        .gaps.length
+                    }{" "}
+                    clarification item
+                    {
+                      currentRole
+                        .gaps.length ===
+                      1
+                        ? ""
+                        : "s"
+                    }{" "}
+                    remain.
+
+                  </p>
+                )}
+
+                {unresolvedCapabilities.length >
+                  0 && (
+                  <p className="mt-2 text-sm text-amber-700">
+
+                    {
+                      unresolvedCapabilities
+                        .length
+                    }{" "}
+                    capability item
+                    {
+                      unresolvedCapabilities
+                        .length ===
+                      1
+                        ? ""
+                        : "s"
+                    }{" "}
+                    still require review.
+
+                  </p>
+                )}
+
+                {canSubmitRole && (
+                  <p className="mt-2 text-sm text-slate-600">
+                    All currently identified
+                    evidence has been resolved.
+                    Submitting this role will run
+                    a final evaluation for emerging
+                    capability or evidence before
+                    the role is completed.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  disabled={
+                    !canSubmitRole ||
+                    submittingRole
+                  }
+                  onClick={
+                    submitCurrentRole
+                  }
+                  className="mt-4 rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   {
-                    currentRole
-                      .gaps.length
-                  } clarification item
-                  {
-                    currentRole
-                      .gaps.length ===
-                    1
-                      ? ""
-                      : "s"
-                  } remain.
-                </p>
-              )}
+                    submittingRole
+                      ? "Submitting role..."
+                      : "Submit role"
+                  }
+                </button>
 
-              {unresolvedCapabilities.length >
-                0 && (
-                <p className="mt-2 text-sm text-amber-700">
-                  {
-                    unresolvedCapabilities
-                      .length
-                  } capability item
-                  {
-                    unresolvedCapabilities
-                      .length ===
-                    1
-                      ? ""
-                      : "s"
-                  } still require review.
-                </p>
-              )}
-
-              {canSubmitRole && (
-                <p className="mt-2 text-sm text-slate-600">
-                  All currently identified
-                  evidence has been resolved.
-                  Submitting this role will run
-                  a final evaluation for emerging
-                  capability or evidence before
-                  the role is completed.
-                </p>
-              )}
-
-              <button
-                type="button"
-                disabled={
-                  !canSubmitRole ||
-                  submittingRole
-                }
-                onClick={
-                  submitCurrentRole
-                }
-                className="mt-4 rounded-lg bg-slate-900 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {
-                  submittingRole
-                    ? "Submitting role..."
-                    : "Submit role"
-                }
-              </button>
-
-            </div>
-          )}
+              </div>
+            )}
 
           {/* ====================================================
               ROLE COMPLETE
