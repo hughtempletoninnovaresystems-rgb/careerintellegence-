@@ -121,28 +121,63 @@ ${cvText}`;
   const roles = Array.isArray(parsed.roles) ? parsed.roles : [];
 
   return {
-    candidateName: typeof parsed.candidateName === "string" ? parsed.candidateName.trim() : "",
+    candidateName:
+      typeof parsed.candidateName === "string"
+        ? parsed.candidateName.trim()
+        : "",
     roles: roles
-      .filter((r: any) => r && typeof r.roleTitle === "string" && r.roleTitle.trim())
-      .map((r: any): ExtractedRole => ({
-        organisationName: typeof r.organisationName === "string" ? r.organisationName.trim() : "",
-        roleTitle: r.roleTitle.trim(),
-        fromDate: typeof r.fromDate === "string" ? r.fromDate.trim() : "",
-        toDate: typeof r.toDate === "string" ? r.toDate.trim() : "",
-        roleDescription: typeof r.roleDescription === "string" ? r.roleDescription.trim() : "",
-        engagementModel: typeof r.engagementModel === "string" ? r.engagementModel.trim() : "",
-        employmentContext: typeof r.employmentContext === "string" ? r.employmentContext.trim() : "",
-        capabilities: Array.isArray(r.capabilities)
-          ? r.capabilities
-              .filter((c: any) => c && typeof c.competency === "string" && c.competency.trim())
-              .map((c: any) => ({
-                competency: c.competency.trim(),
-                evidence: typeof c.evidence === "string" ? c.evidence.trim() : "",
-                sourceSection: typeof c.sourceSection === "string" ? c.sourceSection.trim() : "CV",
-                confidence: clamp(c.confidence),
-              }))
-          : [],
-      })),
+      .filter(
+        (r: any) =>
+          r &&
+          typeof r.roleTitle === "string" &&
+          r.roleTitle.trim()
+      )
+      .map(
+        (r: any): ExtractedRole => ({
+          organisationName:
+            typeof r.organisationName === "string"
+              ? r.organisationName.trim()
+              : "",
+          roleTitle: r.roleTitle.trim(),
+          fromDate:
+            typeof r.fromDate === "string" ? r.fromDate.trim() : "",
+          toDate:
+            typeof r.toDate === "string" ? r.toDate.trim() : "",
+          roleDescription:
+            typeof r.roleDescription === "string"
+              ? r.roleDescription.trim()
+              : "",
+          engagementModel:
+            typeof r.engagementModel === "string"
+              ? r.engagementModel.trim()
+              : "",
+          employmentContext:
+            typeof r.employmentContext === "string"
+              ? r.employmentContext.trim()
+              : "",
+          capabilities: Array.isArray(r.capabilities)
+            ? r.capabilities
+                .filter(
+                  (c: any) =>
+                    c &&
+                    typeof c.competency === "string" &&
+                    c.competency.trim()
+                )
+                .map((c: any) => ({
+                  competency: c.competency.trim(),
+                  evidence:
+                    typeof c.evidence === "string"
+                      ? c.evidence.trim()
+                      : "",
+                  sourceSection:
+                    typeof c.sourceSection === "string"
+                      ? c.sourceSection.trim()
+                      : "CV",
+                  confidence: clamp(c.confidence),
+                }))
+            : [],
+        })
+      ),
   };
 }
 
@@ -159,7 +194,8 @@ async function findCanonicalRole(roleTitle: string) {
 
 async function findCompetency(name: string) {
   const result = await sql`
-    SELECT id, name FROM competencies
+    SELECT id, name
+    FROM competencies
     WHERE LOWER(TRIM(name)) = LOWER(TRIM(${name}))
     LIMIT 1
   `;
@@ -183,10 +219,24 @@ function nameMatches(a: string, b: string) {
   return x === y || x.includes(y) || y.includes(x);
 }
 
-async function generateQuestionsForExistingRole(roleTitle: string, expected: any[], evidenced: ExtractedCapability[]): Promise<Gap[]> {
+async function generateQuestionsForExistingRole(
+  roleTitle: string,
+  expected: any[],
+  evidenced: ExtractedCapability[]
+): Promise<Gap[]> {
   const gaps = expected
-    .filter((e) => !evidenced.some((c) => nameMatches(String(e.name), c.competency)))
-    .map((e) => ({ competency: String(e.name), reason: "The CV does not provide sufficient evidence for this capability." }));
+    .filter(
+      (e) =>
+        !evidenced.some((c) =>
+          nameMatches(String(e.name), c.competency)
+        )
+    )
+    .map((e) => ({
+      competency: String(e.name),
+      reason:
+        "The CV does not provide sufficient evidence for this capability.",
+    }));
+
   if (!gaps.length) return [];
 
   const prompt = `
@@ -195,185 +245,486 @@ For every supplied gap, create one practical evidence-seeking clarification ques
 Return ONLY JSON: {"gaps":[{"competency":"","reason":"","question":""}]}
 Do not remove, merge or rename gaps. Do not invent evidence.
 GAPS:${JSON.stringify(gaps, null, 2)}`;
-  const response = await ai.models.generateContent({ model: "gemini-3.6-flash", contents: prompt, config: { responseMimeType: "application/json" } });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt,
+    config: { responseMimeType: "application/json" },
+  });
+
   const parsed = JSON.parse(cleanJson(response.text ?? "{}"));
   return Array.isArray(parsed.gaps) ? parsed.gaps : [];
 }
 
-async function generateQuestionsForNewRole(role: ExtractedRole): Promise<Gap[]> {
+async function generateQuestionsForNewRole(
+  role: ExtractedRole
+): Promise<Gap[]> {
   const prompt = `
 You are assessing a role that is not currently in the approved role repository.
 ROLE:${JSON.stringify(role, null, 2)}
 Identify important capabilities normally required for this role that are NOT sufficiently evidenced by the role-specific CV evidence above.
 Return ONLY JSON: {"gaps":[{"competency":"","reason":"","question":""}]}
 For each gap provide one practical evidence-seeking question. Do not claim the candidate has experience without evidence. Do not duplicate capabilities already evidenced.`;
-  const response = await ai.models.generateContent({ model: "gemini-3.6-flash", contents: prompt, config: { responseMimeType: "application/json" } });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt,
+    config: { responseMimeType: "application/json" },
+  });
+
   const parsed = JSON.parse(cleanJson(response.text ?? "{}"));
   return Array.isArray(parsed.gaps) ? parsed.gaps : [];
 }
 
-async function createAssessment(userId: string, candidateName: string) {
+async function createAssessment(
+  userId: string,
+  candidateName: string
+) {
   const result = await sql`
-    INSERT INTO career_assessments (user_id, source_type, status, candidate_name)
-    VALUES (${userId}, 'cv', 'in_progress', ${candidateName}) RETURNING id
+    INSERT INTO career_assessments (
+      user_id,
+      source_type,
+      status,
+      candidate_name
+    )
+    VALUES (
+      ${userId},
+      'cv',
+      'in_progress',
+      ${candidateName}
+    )
+    RETURNING id
   `;
+
   return String(result.rows[0].id);
 }
 
-async function createRoleAssessment(assessmentId: string, role: ExtractedRole, sequenceNo: number, canonicalRoleId: string | null, lifecycle: string) {
+async function createRoleAssessment(
+  assessmentId: string,
+  role: ExtractedRole,
+  sequenceNo: number,
+  canonicalRoleId: string | null,
+  lifecycle: string
+) {
   const result = await sql`
     INSERT INTO career_role_assessments (
-      assessment_id, sequence_no, canonical_role_id, organisation_name,
-      proposed_role_title, from_date, to_date, role_description,
-      engagement_model, employment_context, lifecycle_status
-    ) VALUES (
-      ${assessmentId}, ${sequenceNo}, ${canonicalRoleId}, ${role.organisationName},
-      ${role.roleTitle}, ${role.fromDate || null}, ${role.toDate || null}, ${role.roleDescription || null},
-      ${role.engagementModel || null}, ${role.employmentContext || null}, ${lifecycle}
-    ) RETURNING id
+      assessment_id,
+      sequence_no,
+      canonical_role_id,
+      organisation_name,
+      proposed_role_title,
+      from_date,
+      to_date,
+      role_description,
+      engagement_model,
+      employment_context,
+      lifecycle_status
+    )
+    VALUES (
+      ${assessmentId},
+      ${sequenceNo},
+      ${canonicalRoleId},
+      ${role.organisationName},
+      ${role.roleTitle},
+      ${role.fromDate || null},
+      ${role.toDate || null},
+      ${role.roleDescription || null},
+      ${role.engagementModel || null},
+      ${role.employmentContext || null},
+      ${lifecycle}
+    )
+    RETURNING id
   `;
+
   return String(result.rows[0].id);
 }
 
-async function stageCapability(roleAssessmentId: string, input: {
-  name: string; sourceType: string; sourceSection?: string; evidence?: string;
-  confidence?: number; demonstrated?: boolean; capabilityStatus?: CapabilityStatus;
-  assessmentStatus?: AssessmentStatus; reviewStatus?: ReviewStatus;
-}) {
+async function stageCapability(
+  roleAssessmentId: string,
+  input: {
+    name: string;
+    sourceType: string;
+    sourceSection?: string;
+    evidence?: string;
+    confidence?: number;
+    demonstrated?: boolean;
+    capabilityStatus?: CapabilityStatus;
+    assessmentStatus?: AssessmentStatus;
+    reviewStatus?: ReviewStatus;
+  }
+) {
   const existing = await findCompetency(input.name);
+
   const result = await sql`
     INSERT INTO career_role_capabilities (
-      role_assessment_id, canonical_competency_id, proposed_competency_name,
-      source_type, source_section, evidence, ai_confidence, demonstrated,
-      capability_status, assessment_status, review_status
-    ) VALUES (
-      ${roleAssessmentId}, ${existing ? String(existing.id) : null}, ${input.name.trim()},
-      ${input.sourceType}, ${input.sourceSection || null}, ${input.evidence || ""}, ${clamp(input.confidence)},
-      ${typeof input.demonstrated === "boolean" ? input.demonstrated : null},
-      ${input.capabilityStatus || "demonstrated"}, ${input.assessmentStatus || "assessed"}, ${input.reviewStatus || "proposed"}
-    ) RETURNING *
+      role_assessment_id,
+      canonical_competency_id,
+      proposed_competency_name,
+      source_type,
+      source_section,
+      evidence,
+      ai_confidence,
+      demonstrated,
+      capability_status,
+      assessment_status,
+      review_status
+    )
+    VALUES (
+      ${roleAssessmentId},
+      ${existing ? String(existing.id) : null},
+      ${input.name.trim()},
+      ${input.sourceType},
+      ${input.sourceSection || null},
+      ${input.evidence || ""},
+      ${clamp(input.confidence)},
+      ${
+        typeof input.demonstrated === "boolean"
+          ? input.demonstrated
+          : null
+      },
+      ${input.capabilityStatus || "demonstrated"},
+      ${input.assessmentStatus || "assessed"},
+      ${input.reviewStatus || "proposed"}
+    )
+    RETURNING *
   `;
+
   return result.rows[0];
 }
 
-async function replaceOpenQuestions(roleAssessmentId: string, gaps: Gap[]) {
-  const roundResult = await sql`SELECT COALESCE(MAX(round_no),0)+1 AS next_round FROM career_role_questions WHERE role_assessment_id=${roleAssessmentId}`;
-  const roundNo = Number(roundResult.rows[0].next_round || 1);
+async function replaceOpenQuestions(
+  roleAssessmentId: string,
+  gaps: Gap[]
+) {
+  const roundResult = await sql`
+    SELECT COALESCE(MAX(round_no),0)+1 AS next_round
+    FROM career_role_questions
+    WHERE role_assessment_id=${roleAssessmentId}
+  `;
+
+  const roundNo = Number(
+    roundResult.rows[0].next_round || 1
+  );
+
   const created = [];
+
   for (const gap of gaps) {
     if (!gap.competency?.trim() || !gap.question?.trim()) continue;
+
     const result = await sql`
-      INSERT INTO career_role_questions (role_assessment_id, round_no, competency, reason, question, status)
-      VALUES (${roleAssessmentId}, ${roundNo}, ${gap.competency.trim()}, ${gap.reason || ""}, ${gap.question.trim()}, 'open')
+      INSERT INTO career_role_questions (
+        role_assessment_id,
+        round_no,
+        competency,
+        reason,
+        question,
+        status
+      )
+      VALUES (
+        ${roleAssessmentId},
+        ${roundNo},
+        ${gap.competency.trim()},
+        ${gap.reason || ""},
+        ${gap.question.trim()},
+        'open'
+      )
       RETURNING id, competency, reason, question
     `;
+
     created.push(result.rows[0]);
   }
+
   return created;
 }
 
 function mapCapability(row: any) {
   return {
     id: String(row.id),
-    assessmentId: row.assessment_id ? String(row.assessment_id) : undefined,
+    assessmentId: row.assessment_id
+      ? String(row.assessment_id)
+      : undefined,
     roleAssessmentId: String(row.role_assessment_id),
-    competencyId: row.canonical_competency_id ? String(row.canonical_competency_id) : null,
-    proposedCompetencyName: String(row.proposed_competency_name),
+    competencyId: row.canonical_competency_id
+      ? String(row.canonical_competency_id)
+      : null,
+    proposedCompetencyName: String(
+      row.proposed_competency_name
+    ),
     sourceType: String(row.source_type),
-    sourceSection: row.source_section ? String(row.source_section) : null,
-    evidence: row.evidence ? String(row.evidence) : "",
+    sourceSection: row.source_section
+      ? String(row.source_section)
+      : null,
+    evidence: row.evidence
+      ? String(row.evidence)
+      : "",
     confidence: clamp(row.ai_confidence),
-    demonstrated: row.demonstrated === null ? null : Boolean(row.demonstrated),
+    demonstrated:
+      row.demonstrated === null
+        ? null
+        : Boolean(row.demonstrated),
     capabilityStatus: String(row.capability_status),
     assessmentStatus: String(row.assessment_status),
     reviewStatus: String(row.review_status),
-    editedCompetencyName: row.edited_competency_name ? String(row.edited_competency_name) : null,
-    editedEvidence: row.edited_evidence ? String(row.edited_evidence) : null,
+    editedCompetencyName:
+      row.edited_competency_name
+        ? String(row.edited_competency_name)
+        : null,
+    editedEvidence:
+      row.edited_evidence
+        ? String(row.edited_evidence)
+        : null,
   };
 }
 
 async function getRolePayload(roleAssessmentId: string) {
-  const roleResult = await sql`SELECT * FROM career_role_assessments WHERE id=${roleAssessmentId} LIMIT 1`;
-  if (!roleResult.rows.length) throw new Error("Role assessment not found.");
+  const roleResult = await sql`
+    SELECT *
+    FROM career_role_assessments
+    WHERE id=${roleAssessmentId}
+    LIMIT 1
+  `;
+
+  if (!roleResult.rows.length) {
+    throw new Error("Role assessment not found.");
+  }
+
   const role = roleResult.rows[0];
-  const caps = await sql`SELECT * FROM career_role_capabilities WHERE role_assessment_id=${roleAssessmentId} ORDER BY created_at`;
-  const gaps = await sql`SELECT id, competency, reason, question FROM career_role_questions WHERE role_assessment_id=${roleAssessmentId} AND status='open' ORDER BY round_no, created_at`;
+
+  const caps = await sql`
+    SELECT *
+    FROM career_role_capabilities
+    WHERE role_assessment_id=${roleAssessmentId}
+    ORDER BY created_at
+  `;
+
+  const gaps = await sql`
+    SELECT id, competency, reason, question
+    FROM career_role_questions
+    WHERE role_assessment_id=${roleAssessmentId}
+      AND status='open'
+    ORDER BY round_no, created_at
+  `;
+
   return {
     roleAssessmentId: String(role.id),
-    canonicalRoleId: role.canonical_role_id ? String(role.canonical_role_id) : null,
-    organisationName: String(role.organisation_name || ""),
-    roleTitle: String(role.proposed_role_title || ""),
-    fromDate: role.from_date ? String(role.from_date) : "",
-    toDate: role.to_date ? String(role.to_date) : "",
-    roleDescription: role.role_description ? String(role.role_description) : "",
-    engagementModel: role.engagement_model ? String(role.engagement_model) : "",
-    employmentContext: role.employment_context ? String(role.employment_context) : "",
-    lifecycleStatus: String(role.lifecycle_status),
-    gaps: gaps.rows.map((g) => ({ id: String(g.id), competency: String(g.competency), reason: String(g.reason || ""), question: String(g.question) })),
+    canonicalRoleId: role.canonical_role_id
+      ? String(role.canonical_role_id)
+      : null,
+    organisationName: String(
+      role.organisation_name || ""
+    ),
+    roleTitle: String(
+      role.proposed_role_title || ""
+    ),
+    fromDate: role.from_date
+      ? String(role.from_date)
+      : "",
+    toDate: role.to_date
+      ? String(role.to_date)
+      : "",
+    roleDescription: role.role_description
+      ? String(role.role_description)
+      : "",
+    engagementModel: role.engagement_model
+      ? String(role.engagement_model)
+      : "",
+    employmentContext: role.employment_context
+      ? String(role.employment_context)
+      : "",
+    lifecycleStatus: String(
+      role.lifecycle_status
+    ),
+    gaps: gaps.rows.map((g) => ({
+      id: String(g.id),
+      competency: String(g.competency),
+      reason: String(g.reason || ""),
+      question: String(g.question),
+    })),
     stagedCapabilities: caps.rows.map(mapCapability),
   };
 }
 
-async function verifyRoleOwnership(userId: string, roleAssessmentId: string) {
+async function verifyRoleOwnership(
+  userId: string,
+  roleAssessmentId: string
+) {
   const result = await sql`
-    SELECT cra.id FROM career_role_assessments cra
-    JOIN career_assessments ca ON ca.id=cra.assessment_id
-    WHERE cra.id=${roleAssessmentId} AND ca.user_id=${userId} LIMIT 1
+    SELECT cra.id
+    FROM career_role_assessments cra
+    JOIN career_assessments ca
+      ON ca.id=cra.assessment_id
+    WHERE cra.id=${roleAssessmentId}
+      AND ca.user_id=${userId}
+    LIMIT 1
   `;
-  if (!result.rows.length) throw new Error("Role assessment was not found for the current user.");
+
+  if (!result.rows.length) {
+    throw new Error(
+      "Role assessment was not found for the current user."
+    );
+  }
 }
 
 async function handleCVUpload(req: Request) {
   const userId = await getAuthenticatedUserId();
+
   const form = await req.formData();
   const file = form.get("cv");
-  if (!(file instanceof File)) return NextResponse.json({ error: "No CV file uploaded." }, { status: 400 });
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  let cvText = "";
-  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    cvText = await extractPdfText(buffer);
-  } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || file.name.toLowerCase().endsWith(".docx")) {
-    cvText = (await mammoth.extractRawText({ buffer })).value;
-  } else {
-    return NextResponse.json({ error: "Only PDF and DOCX files are supported." }, { status: 400 });
+  if (!(file instanceof File)) {
+    return NextResponse.json(
+      { error: "No CV file uploaded." },
+      { status: 400 }
+    );
   }
-  if (!cvText.trim()) return NextResponse.json({ error: "No readable text could be extracted from the CV." }, { status: 400 });
 
-  const extracted = await extractCareerHistory(cvText);
-  if (!extracted.roles.length) return NextResponse.json({ error: "No employment roles were identified from the CV." }, { status: 422 });
+  const buffer = Buffer.from(
+    await file.arrayBuffer()
+  );
 
-  const assessmentId = await createAssessment(userId, extracted.candidateName);
+  let cvText = "";
+
+  if (
+    file.type === "application/pdf" ||
+    file.name.toLowerCase().endsWith(".pdf")
+  ) {
+    cvText = await extractPdfText(buffer);
+  } else if (
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    file.name.toLowerCase().endsWith(".docx")
+  ) {
+    cvText = (
+      await mammoth.extractRawText({ buffer })
+    ).value;
+  } else {
+    return NextResponse.json(
+      { error: "Only PDF and DOCX files are supported." },
+      { status: 400 }
+    );
+  }
+
+  if (!cvText.trim()) {
+    return NextResponse.json(
+      {
+        error:
+          "No readable text could be extracted from the CV.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const extracted = await extractCareerHistory(
+    cvText
+  );
+
+  if (!extracted.roles.length) {
+    return NextResponse.json(
+      {
+        error:
+          "No employment roles were identified from the CV.",
+      },
+      { status: 422 }
+    );
+  }
+
+  const assessmentId = await createAssessment(
+    userId,
+    extracted.candidateName
+  );
+
   const roleIds: string[] = [];
 
-  for (let i = 0; i < extracted.roles.length; i++) {
+  for (
+    let i = 0;
+    i < extracted.roles.length;
+    i++
+  ) {
     const role = extracted.roles[i];
-    const canonical = await findCanonicalRole(role.roleTitle);
-    const roleAssessmentId = await createRoleAssessment(
-      assessmentId, role, i + 1, canonical ? String(canonical.id) : null, i === 0 ? "in_progress" : "not_started"
+
+    const canonical = await findCanonicalRole(
+      role.roleTitle
     );
+
+    const roleAssessmentId =
+      await createRoleAssessment(
+        assessmentId,
+        role,
+        i + 1,
+        canonical
+          ? String(canonical.id)
+          : null,
+        i === 0
+          ? "in_progress"
+          : "not_started"
+      );
+
     roleIds.push(roleAssessmentId);
 
     for (const capability of role.capabilities) {
-      await stageCapability(roleAssessmentId, {
-        name: capability.competency, sourceType: "cv", sourceSection: capability.sourceSection || "CV",
-        evidence: capability.evidence || "", confidence: capability.confidence, demonstrated: true,
-        capabilityStatus: "demonstrated", assessmentStatus: "assessed", reviewStatus: "proposed",
-      });
+      await stageCapability(
+        roleAssessmentId,
+        {
+          name: capability.competency,
+          sourceType: "cv",
+          sourceSection:
+            capability.sourceSection || "CV",
+          evidence:
+            capability.evidence || "",
+          confidence:
+            capability.confidence,
+          demonstrated: true,
+          capabilityStatus:
+            "demonstrated",
+          assessmentStatus:
+            "assessed",
+          reviewStatus:
+            "proposed",
+        }
+      );
     }
 
     const gaps = canonical
-      ? await generateQuestionsForExistingRole(role.roleTitle, await getRoleCompetencies(String(canonical.id)), role.capabilities)
-      : await generateQuestionsForNewRole(role);
-    await replaceOpenQuestions(roleAssessmentId, gaps);
+      ? await generateQuestionsForExistingRole(
+          role.roleTitle,
+          await getRoleCompetencies(
+            String(canonical.id)
+          ),
+          role.capabilities
+        )
+      : await generateQuestionsForNewRole(
+          role
+        );
+
+    await replaceOpenQuestions(
+      roleAssessmentId,
+      gaps
+    );
   }
 
   const roles = [];
-  for (const id of roleIds) roles.push(await getRolePayload(id));
-  return NextResponse.json({ assessmentId, candidateName: extracted.candidateName, roles, message: `${roles.length} role${roles.length === 1 ? "" : "s"} identified from the CV.` });
+
+  for (const id of roleIds) {
+    roles.push(
+      await getRolePayload(id)
+    );
+  }
+
+  return NextResponse.json({
+    assessmentId,
+    candidateName:
+      extracted.candidateName,
+    roles,
+    message: `${roles.length} role${
+      roles.length === 1 ? "" : "s"
+    } identified from the CV.`,
+  });
 }
 
-async function evaluateAnswers(roleTitle: string, questions: any[]) {
+async function evaluateAnswers(
+  roleTitle: string,
+  questions: any[]
+) {
   const prompt = `
 You are evaluating clarification answers for the role "${roleTitle}".
 Evaluate each answer and also identify any OTHER capability clearly evidenced by the answers.
@@ -389,95 +740,496 @@ Rules:
 - emergingCapabilities must be supported directly by the supplied answers and must not duplicate a named assessed competency.
 - Never invent experience.
 - Evidence must be concise.
-QUESTIONS AND ANSWERS:${JSON.stringify(questions, null, 2)}`;
-  const response = await ai.models.generateContent({ model: "gemini-3.6-flash", contents: prompt, config: { responseMimeType: "application/json" } });
-  const parsed = JSON.parse(cleanJson(response.text ?? "{}"));
-  return { results: Array.isArray(parsed.results) ? parsed.results : [], emergingCapabilities: Array.isArray(parsed.emergingCapabilities) ? parsed.emergingCapabilities : [] };
+QUESTIONS AND ANSWERS:${JSON.stringify(
+    questions,
+    null,
+    2
+  )}`;
+
+  const response =
+    await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType:
+          "application/json",
+      },
+    });
+
+  const parsed = JSON.parse(
+    cleanJson(
+      response.text ?? "{}"
+    )
+  );
+
+  return {
+    results: Array.isArray(
+      parsed.results
+    )
+      ? parsed.results
+      : [],
+    emergingCapabilities:
+      Array.isArray(
+        parsed.emergingCapabilities
+      )
+        ? parsed.emergingCapabilities
+        : [],
+  };
 }
 
-async function handleAssessRole(userId: string, body: any) {
-  const roleAssessmentId = String(body.roleAssessmentId || "").trim();
-  if (!roleAssessmentId) return NextResponse.json({ error: "roleAssessmentId is required." }, { status: 400 });
-  await verifyRoleOwnership(userId, roleAssessmentId);
-  const questions = Array.isArray(body.questions) ? body.questions : [];
-  if (!questions.length) return NextResponse.json({ error: "Questions and answers are required." }, { status: 400 });
+async function handleAssessRole(
+  userId: string,
+  body: any
+) {
+  const roleAssessmentId =
+    String(
+      body.roleAssessmentId || ""
+    ).trim();
 
-  const rolePayload = await getRolePayload(roleAssessmentId);
-  const evaluation = await evaluateAnswers(rolePayload.roleTitle, questions);
+  if (!roleAssessmentId) {
+    return NextResponse.json(
+      {
+        error:
+          "roleAssessmentId is required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  await verifyRoleOwnership(
+    userId,
+    roleAssessmentId
+  );
+
+  const questions =
+    Array.isArray(body.questions)
+      ? body.questions
+      : [];
+
+  if (!questions.length) {
+    return NextResponse.json(
+      {
+        error:
+          "Questions and answers are required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const rolePayload =
+    await getRolePayload(
+      roleAssessmentId
+    );
+
+  const evaluation =
+    await evaluateAnswers(
+      rolePayload.roleTitle,
+      questions
+    );
+
   const staged: any[] = [];
   const followUps: Gap[] = [];
 
-  for (const result of evaluation.results as Evaluation[]) {
-    const q = questions.find((x: any) => String(x.gapId || "") === String((result as any).questionId || "") || nameMatches(String(x.competency || ""), result.competency || ""));
+  for (
+    const result of
+      evaluation.results as Evaluation[]
+  ) {
+    const q =
+      questions.find(
+        (x: any) =>
+          String(x.gapId || "") ===
+            String(
+              (result as any)
+                .questionId || ""
+            ) ||
+          nameMatches(
+            String(
+              x.competency || ""
+            ),
+            result.competency ||
+              ""
+          )
+      );
+
     if (q?.gapId) {
-      await sql`UPDATE career_role_questions SET status='answered', updated_at=NOW() WHERE id=${String(q.gapId)} AND role_assessment_id=${roleAssessmentId}`;
       await sql`
-        INSERT INTO career_role_answers (question_id, role_assessment_id, answer, evaluation_status, evaluation_evidence, evaluation_confidence)
-        VALUES (${String(q.gapId)}, ${roleAssessmentId}, ${String(q.answer || "")}, ${result.status}, ${result.evidence || ""}, ${clamp(result.confidence)})
+        UPDATE career_role_questions
+        SET status='answered',
+            updated_at=NOW()
+        WHERE id=${String(q.gapId)}
+          AND role_assessment_id=${roleAssessmentId}
+      `;
+
+      await sql`
+        INSERT INTO career_role_answers (
+          question_id,
+          role_assessment_id,
+          answer,
+          evaluation_status,
+          evaluation_evidence,
+          evaluation_confidence
+        )
+        VALUES (
+          ${String(q.gapId)},
+          ${roleAssessmentId},
+          ${String(q.answer || "")},
+          ${result.status},
+          ${result.evidence || ""},
+          ${clamp(result.confidence)}
+        )
       `;
     }
 
-    if (result.status === "demonstrated") {
-      staged.push(await stageCapability(roleAssessmentId, { name: result.competency, sourceType: "assessment", sourceSection: rolePayload.roleTitle, evidence: result.evidence, confidence: result.confidence, demonstrated: true, capabilityStatus: "demonstrated", assessmentStatus: "assessed", reviewStatus: "proposed" }));
-    } else if (result.status === "gap") {
-      staged.push(await stageCapability(roleAssessmentId, { name: result.competency, sourceType: "assessment", sourceSection: rolePayload.roleTitle, evidence: result.evidence, confidence: result.confidence, demonstrated: false, capabilityStatus: "gap", assessmentStatus: "assessed", reviewStatus: "accepted" }));
-    } else if (result.status === "clarify" && result.followUpQuestion?.trim()) {
-      followUps.push({ competency: result.competency, reason: result.evidence || "Further evidence is required.", question: result.followUpQuestion.trim() });
+    if (
+      result.status ===
+      "demonstrated"
+    ) {
+      staged.push(
+        await stageCapability(
+          roleAssessmentId,
+          {
+            name:
+              result.competency,
+            sourceType:
+              "assessment",
+            sourceSection:
+              rolePayload.roleTitle,
+            evidence:
+              result.evidence,
+            confidence:
+              result.confidence,
+            demonstrated: true,
+            capabilityStatus:
+              "demonstrated",
+            assessmentStatus:
+              "assessed",
+            reviewStatus:
+              "proposed",
+          }
+        )
+      );
+    } else if (
+      result.status === "gap"
+    ) {
+      staged.push(
+        await stageCapability(
+          roleAssessmentId,
+          {
+            name:
+              result.competency,
+            sourceType:
+              "assessment",
+            sourceSection:
+              rolePayload.roleTitle,
+            evidence:
+              result.evidence,
+            confidence:
+              result.confidence,
+            demonstrated: false,
+            capabilityStatus:
+              "gap",
+            assessmentStatus:
+              "assessed",
+            reviewStatus:
+              "accepted",
+          }
+        )
+      );
+    } else if (
+      result.status ===
+        "clarify" &&
+      result.followUpQuestion?.trim()
+    ) {
+      followUps.push({
+        competency:
+          result.competency,
+        reason:
+          result.evidence ||
+          "Further evidence is required.",
+        question:
+          result.followUpQuestion.trim(),
+      });
     }
   }
 
-  for (const emerging of evaluation.emergingCapabilities) {
-    if (!emerging?.competency?.trim()) continue;
-    staged.push(await stageCapability(roleAssessmentId, { name: emerging.competency, sourceType: "assessment", sourceSection: "Emerging capability", evidence: emerging.evidence || "", confidence: emerging.confidence, demonstrated: true, capabilityStatus: "demonstrated", assessmentStatus: "assessed", reviewStatus: "proposed" }));
+  for (
+    const emerging of
+      evaluation.emergingCapabilities
+  ) {
+    if (
+      !emerging?.competency?.trim()
+    )
+      continue;
+
+    staged.push(
+      await stageCapability(
+        roleAssessmentId,
+        {
+          name:
+            emerging.competency,
+          sourceType:
+            "assessment",
+          sourceSection:
+            "Emerging capability",
+          evidence:
+            emerging.evidence ||
+            "",
+          confidence:
+            emerging.confidence,
+          demonstrated: true,
+          capabilityStatus:
+            "demonstrated",
+          assessmentStatus:
+            "assessed",
+          reviewStatus:
+            "proposed",
+        }
+      )
+    );
   }
 
-  if (followUps.length) await replaceOpenQuestions(roleAssessmentId, followUps);
-  const open = await sql`SELECT COUNT(*)::int AS count FROM career_role_questions WHERE role_assessment_id=${roleAssessmentId} AND status='open'`;
-  const requires = Number(open.rows[0].count) > 0;
-  await sql`UPDATE career_role_assessments SET lifecycle_status=${requires ? "in_progress" : "review_ready"}, updated_at=NOW() WHERE id=${roleAssessmentId}`;
-  const role = await getRolePayload(roleAssessmentId);
-  return NextResponse.json({ success: true, roleAssessmentId, stagedCapabilities: role.stagedCapabilities, gaps: role.gaps, lifecycleStatus: role.lifecycleStatus, requiresFurtherClarification: requires, message: requires ? "Further clarification is required." : "Clarification complete. Review the capability evidence for this role." });
+  if (followUps.length) {
+    await replaceOpenQuestions(
+      roleAssessmentId,
+      followUps
+    );
+  }
+
+  const open = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM career_role_questions
+    WHERE role_assessment_id=${roleAssessmentId}
+      AND status='open'
+  `;
+
+  const requires =
+    Number(
+      open.rows[0].count
+    ) > 0;
+
+  await sql`
+    UPDATE career_role_assessments
+    SET lifecycle_status=${
+      requires
+        ? "in_progress"
+        : "review_ready"
+    },
+    updated_at=NOW()
+    WHERE id=${roleAssessmentId}
+  `;
+
+  const role =
+    await getRolePayload(
+      roleAssessmentId
+    );
+
+  return NextResponse.json({
+    success: true,
+    roleAssessmentId,
+    stagedCapabilities:
+      role.stagedCapabilities,
+    gaps: role.gaps,
+    lifecycleStatus:
+      role.lifecycleStatus,
+    requiresFurtherClarification:
+      requires,
+    message: requires
+      ? "Further clarification is required."
+      : "Clarification complete. Review the capability evidence for this role.",
+  });
 }
 
-async function handleReviewCapability(userId: string, body: any) {
-  const roleAssessmentId = String(body.roleAssessmentId || "").trim();
-  const capabilityId = String(body.capabilityId || "").trim();
-  const reviewStatus = String(body.reviewStatus || "").trim() as ReviewStatus;
-  if (!roleAssessmentId || !capabilityId) return NextResponse.json({ error: "roleAssessmentId and capabilityId are required." }, { status: 400 });
-  if (!["accepted", "edited", "rejected"].includes(reviewStatus)) return NextResponse.json({ error: "Invalid review status." }, { status: 400 });
-  await verifyRoleOwnership(userId, roleAssessmentId);
+async function handleReviewCapability(
+  userId: string,
+  body: any
+) {
+  const roleAssessmentId =
+    String(
+      body.roleAssessmentId || ""
+    ).trim();
+
+  const capabilityId =
+    String(
+      body.capabilityId || ""
+    ).trim();
+
+  const reviewStatus =
+    String(
+      body.reviewStatus || ""
+    ).trim() as ReviewStatus;
+
+  if (
+    !roleAssessmentId ||
+    !capabilityId
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "roleAssessmentId and capabilityId are required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    ![
+      "accepted",
+      "edited",
+      "rejected",
+    ].includes(reviewStatus)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Invalid review status.",
+      },
+      { status: 400 }
+    );
+  }
+
+  await verifyRoleOwnership(
+    userId,
+    roleAssessmentId
+  );
+
   const result = await sql`
-    UPDATE career_role_capabilities SET
+    UPDATE career_role_capabilities
+    SET
       review_status=${reviewStatus},
-      edited_competency_name=${reviewStatus === "edited" ? String(body.competencyName || "").trim() || null : null},
-      edited_evidence=${reviewStatus === "edited" ? String(body.evidence || "").trim() : null},
+      edited_competency_name=${
+        reviewStatus === "edited"
+          ? String(
+              body.competencyName ||
+                ""
+            ).trim() || null
+          : null
+      },
+      edited_evidence=${
+        reviewStatus === "edited"
+          ? String(
+              body.evidence || ""
+            ).trim()
+          : null
+      },
       updated_at=NOW()
-    WHERE id=${capabilityId} AND role_assessment_id=${roleAssessmentId}
+    WHERE id=${capabilityId}
+      AND role_assessment_id=${roleAssessmentId}
     RETURNING *
   `;
-  if (!result.rows.length) return NextResponse.json({ error: "Capability not found." }, { status: 404 });
-  return NextResponse.json({ success: true, capability: mapCapability(result.rows[0]) });
+
+  if (!result.rows.length) {
+    return NextResponse.json(
+      {
+        error:
+          "Capability not found.",
+      },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    capability:
+      mapCapability(
+        result.rows[0]
+      ),
+  });
 }
 
-async function handleUpdateRole(userId: string, body: any) {
-  const id = String(body.roleAssessmentId || "").trim();
-  if (!id) return NextResponse.json({ error: "roleAssessmentId is required." }, { status: 400 });
-  await verifyRoleOwnership(userId, id);
-  const title = String(body.roleTitle || "").trim();
-  const org = String(body.organisationName || "").trim();
-  if (!title || !org) return NextResponse.json({ error: "Organisation and role title are required." }, { status: 400 });
-  const canonical = await findCanonicalRole(title);
+async function handleUpdateRole(
+  userId: string,
+  body: any
+) {
+  const id =
+    String(
+      body.roleAssessmentId || ""
+    ).trim();
+
+  if (!id) {
+    return NextResponse.json(
+      {
+        error:
+          "roleAssessmentId is required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  await verifyRoleOwnership(
+    userId,
+    id
+  );
+
+  const title =
+    String(
+      body.roleTitle || ""
+    ).trim();
+
+  const org =
+    String(
+      body.organisationName || ""
+    ).trim();
+
+  if (!title || !org) {
+    return NextResponse.json(
+      {
+        error:
+          "Organisation and role title are required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const canonical =
+    await findCanonicalRole(
+      title
+    );
+
   await sql`
-    UPDATE career_role_assessments SET
-      canonical_role_id=${canonical ? String(canonical.id) : null}, organisation_name=${org}, proposed_role_title=${title},
-      from_date=${body.fromDate || null}, to_date=${body.toDate || null}, role_description=${body.roleDescription || null},
-      engagement_model=${body.engagementModel || null}, employment_context=${body.employmentContext || null}, updated_at=NOW()
+    UPDATE career_role_assessments
+    SET
+      canonical_role_id=${
+        canonical
+          ? String(canonical.id)
+          : null
+      },
+      organisation_name=${org},
+      proposed_role_title=${title},
+      from_date=${
+        body.fromDate || null
+      },
+      to_date=${
+        body.toDate || null
+      },
+      role_description=${
+        body.roleDescription ||
+        null
+      },
+      engagement_model=${
+        body.engagementModel ||
+        null
+      },
+      employment_context=${
+        body.employmentContext ||
+        null
+      },
+      updated_at=NOW()
     WHERE id=${id}
   `;
-  return NextResponse.json({ success: true, role: await getRolePayload(id) });
+
+  return NextResponse.json({
+    success: true,
+    role:
+      await getRolePayload(id),
+  });
 }
 
-async function finalSubmissionCheck(role: any, caps: any[], gaps: any[], answers: any[]) {
+async function finalSubmissionCheck(
+  role: any,
+  caps: any[],
+  gaps: any[],
+  answers: any[]
+) {
   const prompt = `
 Perform a final consistency check for this historical role before it is committed to a candidate Knowledge Profile.
 ROLE:${JSON.stringify(role, null, 2)}
@@ -489,184 +1241,847 @@ Return ONLY JSON:
 Only return an emerging capability when it is directly supported by evidence already present above and is not already represented.
 Only request clarification for a material unresolved ambiguity that prevents accurate completion of this role.
 Do not invent experience. Prefer empty arrays when no further work is required.`;
-  const response = await ai.models.generateContent({ model: "gemini-3.6-flash", contents: prompt, config: { responseMimeType: "application/json" } });
-  const parsed = JSON.parse(cleanJson(response.text ?? "{}"));
-  return { emergingCapabilities: Array.isArray(parsed.emergingCapabilities) ? parsed.emergingCapabilities : [], clarifications: Array.isArray(parsed.clarifications) ? parsed.clarifications : [] };
+
+  const response =
+    await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType:
+          "application/json",
+      },
+    });
+
+  const parsed = JSON.parse(
+    cleanJson(
+      response.text ?? "{}"
+    )
+  );
+
+  return {
+    emergingCapabilities:
+      Array.isArray(
+        parsed.emergingCapabilities
+      )
+        ? parsed.emergingCapabilities
+        : [],
+    clarifications:
+      Array.isArray(
+        parsed.clarifications
+      )
+        ? parsed.clarifications
+        : [],
+  };
 }
 
-async function getOrCreateCanonicalCompetency(name: string) {
-  const existing = await findCompetency(name);
-  if (existing) return { id: String(existing.id), name: String(existing.name) };
-  const result = await sql`INSERT INTO competencies(name) VALUES(${name.trim()}) ON CONFLICT(name) DO UPDATE SET name=EXCLUDED.name RETURNING id,name`;
-  return { id: String(result.rows[0].id), name: String(result.rows[0].name) };
-}
+/*
+ * ============================================================
+ * REPOSITORY ENRICHMENT
+ * ============================================================
+ *
+ * New canonical objects are created as PROPOSED.
+ *
+ * They are deliberately NOT marked approved/accepted here.
+ * The subsequent governance process can review and promote them.
+ *
+ * Existing canonical objects continue to be reused unchanged.
+ * ============================================================
+ */
 
-async function getOrCreateCanonicalRole(title: string) {
-  const existing = await findCanonicalRole(title);
-  if (existing) return String(existing.id);
+async function getOrCreateCanonicalCompetency(
+  name: string
+) {
+  const existing =
+    await findCompetency(name);
+
+  if (existing) {
+    return {
+      id: String(existing.id),
+      name: String(existing.name),
+      created: false,
+    };
+  }
+
   const result = await sql`
-    INSERT INTO roles(name, job_title, description) VALUES(${title}, ${title}, 'Role created from an approved career assessment.')
-    ON CONFLICT(name) DO UPDATE SET job_title=EXCLUDED.job_title, updated_at=NOW() RETURNING id
+    INSERT INTO competencies (
+      name,
+      lifecycle_status
+    )
+    VALUES (
+      ${name.trim()},
+      'proposed'
+    )
+    ON CONFLICT(name)
+    DO UPDATE SET
+      name=EXCLUDED.name
+    RETURNING id, name
   `;
-  return String(result.rows[0].id);
+
+  return {
+    id: String(
+      result.rows[0].id
+    ),
+    name: String(
+      result.rows[0].name
+    ),
+    created: true,
+  };
 }
 
-async function promoteRole(userId: string, roleAssessmentId: string) {
-  const role = await getRolePayload(roleAssessmentId);
+async function getOrCreateCanonicalRole(
+  title: string
+) {
+  const existing =
+    await findCanonicalRole(title);
 
-  /*
-   * Governance rule:
-   * Candidate approval promotes knowledge to the candidate profile,
-   * but does NOT automatically create or amend shared canonical
-   * roles/competencies. Canonical repository enrichment is a
-   * separate governed process.
-   */
-  const canonicalRoleId = role.canonicalRoleId || null;
+  if (existing) {
+    return {
+      id: String(existing.id),
+      created: false,
+    };
+  }
 
-  const profileRole = await sql`
-    INSERT INTO candidate_profile_roles (
-      user_id, source_role_assessment_id, canonical_role_id, organisation_name, role_title,
-      from_date, to_date, role_description, engagement_model, employment_context
-    ) VALUES (
-      ${userId}, ${roleAssessmentId}, ${canonicalRoleId}, ${role.organisationName}, ${role.roleTitle},
-      ${role.fromDate || null}, ${role.toDate || null}, ${role.roleDescription || null}, ${role.engagementModel || null}, ${role.employmentContext || null}
-    ) ON CONFLICT(source_role_assessment_id) DO UPDATE SET
-      canonical_role_id=EXCLUDED.canonical_role_id, organisation_name=EXCLUDED.organisation_name,
-      role_title=EXCLUDED.role_title, from_date=EXCLUDED.from_date, to_date=EXCLUDED.to_date,
-      role_description=EXCLUDED.role_description, engagement_model=EXCLUDED.engagement_model,
-      employment_context=EXCLUDED.employment_context, updated_at=NOW()
+  const result = await sql`
+    INSERT INTO roles (
+      name,
+      job_title,
+      description,
+      lifecycle_status
+    )
+    VALUES (
+      ${title.trim()},
+      ${title.trim()},
+      'Role created from an approved career assessment.',
+      'proposed'
+    )
+    ON CONFLICT(name)
+    DO UPDATE SET
+      job_title=EXCLUDED.job_title,
+      updated_at=NOW()
     RETURNING id
   `;
-  const profileRoleId = String(profileRole.rows[0].id);
 
-  const approved = role.stagedCapabilities.filter(
-    (c: any) => c.capabilityStatus === "demonstrated" && ["accepted", "edited"].includes(c.reviewStatus)
+  return {
+    id: String(
+      result.rows[0].id
+    ),
+    created: true,
+  };
+}
+
+async function getOrCreateRoleCompetency(
+  roleId: string,
+  competencyId: string
+) {
+  const existing = await sql`
+    SELECT id
+    FROM role_competencies
+    WHERE role_id=${roleId}
+      AND competency_id=${competencyId}
+    LIMIT 1
+  `;
+
+  if (existing.rows.length) {
+    return String(
+      existing.rows[0].id
+    );
+  }
+
+  const result = await sql`
+    INSERT INTO role_competencies (
+      role_id,
+      competency_id,
+      lifecycle_status
+    )
+    VALUES (
+      ${roleId},
+      ${competencyId},
+      'proposed'
+    )
+    RETURNING id
+  `;
+
+  return String(
+    result.rows[0].id
   );
+}
+
+async function enrichCanonicalRepository(
+  role: any,
+  approved: any[]
+) {
+  /*
+   * Existing role:
+   *   use the existing canonical role.
+   *
+   * New role:
+   *   create a proposed canonical role.
+   */
+
+  const canonicalRole =
+    role.canonicalRoleId
+      ? {
+          id: role.canonicalRoleId,
+          created: false,
+        }
+      : await getOrCreateCanonicalRole(
+          role.roleTitle
+        );
+
+  /*
+   * For a genuinely new role, create the role in
+   * the repository as proposed.
+   *
+   * The assessment record itself remains unchanged:
+   * canonicalRoleId stays NULL because it records
+   * what happened during the assessment.
+   */
 
   for (const item of approved) {
     const finalName =
-      item.reviewStatus === "edited" && item.editedCompetencyName
+      item.reviewStatus === "edited" &&
+      item.editedCompetencyName
         ? item.editedCompetencyName
         : item.proposedCompetencyName;
+
+    if (!finalName?.trim()) {
+      continue;
+    }
+
+    /*
+     * Existing competency = reuse.
+     * New competency = create as proposed.
+     */
+    const canonicalCompetency =
+      await getOrCreateCanonicalCompetency(
+        finalName
+      );
+
+    /*
+     * Associate the canonical role and competency.
+     * New relationship is proposed for governance.
+     */
+    await getOrCreateRoleCompetency(
+      canonicalRole.id,
+      canonicalCompetency.id
+    );
+  }
+
+  return {
+    canonicalRoleId:
+      canonicalRole.id,
+  };
+}
+
+async function promoteRole(
+  userId: string,
+  roleAssessmentId: string
+) {
+  const role =
+    await getRolePayload(
+      roleAssessmentId
+    );
+
+  /*
+   * Candidate approval promotes knowledge to the
+   * candidate profile.
+   *
+   * Repository enrichment is also initiated here,
+   * but new repository objects remain PROPOSED.
+   */
+
+  const canonicalRoleId =
+    role.canonicalRoleId || null;
+
+  const profileRole =
+    await sql`
+      INSERT INTO candidate_profile_roles (
+        user_id,
+        source_role_assessment_id,
+        canonical_role_id,
+        organisation_name,
+        role_title,
+        from_date,
+        to_date,
+        role_description,
+        engagement_model,
+        employment_context
+      )
+      VALUES (
+        ${userId},
+        ${roleAssessmentId},
+        ${canonicalRoleId},
+        ${role.organisationName},
+        ${role.roleTitle},
+        ${role.fromDate || null},
+        ${role.toDate || null},
+        ${role.roleDescription || null},
+        ${role.engagementModel || null},
+        ${role.employmentContext || null}
+      )
+      ON CONFLICT(source_role_assessment_id)
+      DO UPDATE SET
+        canonical_role_id=EXCLUDED.canonical_role_id,
+        organisation_name=EXCLUDED.organisation_name,
+        role_title=EXCLUDED.role_title,
+        from_date=EXCLUDED.from_date,
+        to_date=EXCLUDED.to_date,
+        role_description=EXCLUDED.role_description,
+        engagement_model=EXCLUDED.engagement_model,
+        employment_context=EXCLUDED.employment_context,
+        updated_at=NOW()
+      RETURNING id
+    `;
+
+  const profileRoleId =
+    String(
+      profileRole.rows[0].id
+    );
+
+  const approved =
+    role.stagedCapabilities.filter(
+      (c: any) =>
+        c.capabilityStatus ===
+          "demonstrated" &&
+        [
+          "accepted",
+          "edited",
+        ].includes(
+          c.reviewStatus
+        )
+    );
+
+  /*
+   * ============================================================
+   * NEW:
+   * Ensure repository objects exist for approved capabilities.
+   *
+   * New repository objects are PROPOSED.
+   * Existing repository objects are reused.
+   * ============================================================
+   */
+
+  await enrichCanonicalRepository(
+    role,
+    approved
+  );
+
+  /*
+   * Candidate profile continues to be populated exactly
+   * as before.
+   */
+
+  for (const item of approved) {
+    const finalName =
+      item.reviewStatus === "edited" &&
+      item.editedCompetencyName
+        ? item.editedCompetencyName
+        : item.proposedCompetencyName;
+
     const finalEvidence =
-      item.reviewStatus === "edited" && item.editedEvidence
+      item.reviewStatus === "edited" &&
+      item.editedEvidence
         ? item.editedEvidence
         : item.evidence || "";
 
-    const canonicalCompetency = await findCompetency(finalName);
-    const canonicalCompetencyId = canonicalCompetency
-      ? String(canonicalCompetency.id)
-      : null;
+    const canonicalCompetency =
+      await findCompetency(
+        finalName
+      );
+
+    const canonicalCompetencyId =
+      canonicalCompetency
+        ? String(
+            canonicalCompetency.id
+          )
+        : null;
 
     await sql`
       INSERT INTO candidate_profile_role_capabilities(
-        candidate_profile_role_id, competency_id, capability_name, confidence, evidence, source_type
-      ) VALUES(
-        ${profileRoleId}, ${canonicalCompetencyId}, ${finalName}, ${clamp(item.confidence)}, ${finalEvidence}, ${item.sourceType}
+        candidate_profile_role_id,
+        competency_id,
+        capability_name,
+        confidence,
+        evidence,
+        source_type
       )
-      ON CONFLICT(candidate_profile_role_id, capability_name) DO UPDATE SET
+      VALUES(
+        ${profileRoleId},
+        ${canonicalCompetencyId},
+        ${finalName},
+        ${clamp(item.confidence)},
+        ${finalEvidence},
+        ${item.sourceType}
+      )
+      ON CONFLICT(
+        candidate_profile_role_id,
+        capability_name
+      )
+      DO UPDATE SET
         competency_id=EXCLUDED.competency_id,
-        confidence=GREATEST(candidate_profile_role_capabilities.confidence, EXCLUDED.confidence),
+        confidence=GREATEST(
+          candidate_profile_role_capabilities.confidence,
+          EXCLUDED.confidence
+        ),
         evidence=EXCLUDED.evidence,
         source_type=EXCLUDED.source_type,
         updated_at=NOW()
     `;
 
     /*
-     * Legacy prototype compatibility only when BOTH canonical objects
-     * already exist. No shared repository object is created here.
+     * Legacy prototype compatibility only when BOTH
+     * canonical objects already exist.
      */
-    if (canonicalRoleId && canonicalCompetencyId) {
+    if (
+      canonicalRoleId &&
+      canonicalCompetencyId
+    ) {
       await sql`
-        INSERT INTO candidate_knowledge(user_id, role_id, competency_id, confidence)
-        VALUES(${userId}, ${canonicalRoleId}, ${canonicalCompetencyId}, ${clamp(item.confidence)})
-        ON CONFLICT(user_id, role_id, competency_id) DO UPDATE SET
-          confidence=GREATEST(candidate_knowledge.confidence, EXCLUDED.confidence),
+        INSERT INTO candidate_knowledge(
+          user_id,
+          role_id,
+          competency_id,
+          confidence
+        )
+        VALUES(
+          ${userId},
+          ${canonicalRoleId},
+          ${canonicalCompetencyId},
+          ${clamp(item.confidence)}
+        )
+        ON CONFLICT(
+          user_id,
+          role_id,
+          competency_id
+        )
+        DO UPDATE SET
+          confidence=GREATEST(
+            candidate_knowledge.confidence,
+            EXCLUDED.confidence
+          ),
           updated_at=NOW()
       `;
     }
   }
 
-  const confirmedGaps = role.stagedCapabilities.filter(
-    (c: any) => c.capabilityStatus === "gap" && c.assessmentStatus === "assessed"
-  );
+  const confirmedGaps =
+    role.stagedCapabilities.filter(
+      (c: any) =>
+        c.capabilityStatus ===
+          "gap" &&
+        c.assessmentStatus ===
+          "assessed"
+    );
 
   for (const gap of confirmedGaps) {
     await sql`
-      INSERT INTO candidate_profile_role_gaps(candidate_profile_role_id, competency_name, evidence)
-      VALUES(${profileRoleId}, ${gap.proposedCompetencyName}, ${gap.evidence || ""})
-      ON CONFLICT(candidate_profile_role_id, competency_name) DO UPDATE SET evidence=EXCLUDED.evidence
+      INSERT INTO candidate_profile_role_gaps(
+        candidate_profile_role_id,
+        competency_name,
+        evidence
+      )
+      VALUES(
+        ${profileRoleId},
+        ${gap.proposedCompetencyName},
+        ${gap.evidence || ""}
+      )
+      ON CONFLICT(
+        candidate_profile_role_id,
+        competency_name
+      )
+      DO UPDATE SET
+        evidence=EXCLUDED.evidence
     `;
   }
 
   return approved.length;
 }
 
-async function handleSubmitRole(userId: string, body: any) {
-  const roleAssessmentId = String(body.roleAssessmentId || "").trim();
-  if (!roleAssessmentId) return NextResponse.json({ error: "roleAssessmentId is required." }, { status: 400 });
-  await verifyRoleOwnership(userId, roleAssessmentId);
-  const role = await getRolePayload(roleAssessmentId);
-  if (role.gaps.length) return NextResponse.json({ error: "This role still has open clarification questions." }, { status: 409 });
-  const unresolved = role.stagedCapabilities.filter((c: any) => c.capabilityStatus === "demonstrated" && c.reviewStatus === "proposed");
-  if (unresolved.length) return NextResponse.json({ error: "Every demonstrated capability must be accepted, edited or rejected before submission." }, { status: 409 });
+async function handleSubmitRole(
+  userId: string,
+  body: any
+) {
+  const roleAssessmentId =
+    String(
+      body.roleAssessmentId || ""
+    ).trim();
 
-  const answers = await sql`SELECT answer,evaluation_status,evaluation_evidence FROM career_role_answers WHERE role_assessment_id=${roleAssessmentId} ORDER BY created_at`;
-  const approved = role.stagedCapabilities.filter((c: any) => c.capabilityStatus === "demonstrated" && ["accepted", "edited"].includes(c.reviewStatus));
-  const confirmedGaps = role.stagedCapabilities.filter((c: any) => c.capabilityStatus === "gap" && c.assessmentStatus === "assessed");
-  const check = await finalSubmissionCheck(role, approved, confirmedGaps, answers.rows);
+  if (!roleAssessmentId) {
+    return NextResponse.json(
+      {
+        error:
+          "roleAssessmentId is required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  await verifyRoleOwnership(
+    userId,
+    roleAssessmentId
+  );
+
+  const role =
+    await getRolePayload(
+      roleAssessmentId
+    );
+
+  if (role.gaps.length) {
+    return NextResponse.json(
+      {
+        error:
+          "This role still has open clarification questions.",
+      },
+      { status: 409 }
+    );
+  }
+
+  const unresolved =
+    role.stagedCapabilities.filter(
+      (c: any) =>
+        c.capabilityStatus ===
+          "demonstrated" &&
+        c.reviewStatus ===
+          "proposed"
+    );
+
+  if (unresolved.length) {
+    return NextResponse.json(
+      {
+        error:
+          "Every demonstrated capability must be accepted, edited or rejected before submission.",
+      },
+      { status: 409 }
+    );
+  }
+
+  const answers =
+    await sql`
+      SELECT
+        answer,
+        evaluation_status,
+        evaluation_evidence
+      FROM career_role_answers
+      WHERE role_assessment_id=${roleAssessmentId}
+      ORDER BY created_at
+    `;
+
+  const approved =
+    role.stagedCapabilities.filter(
+      (c: any) =>
+        c.capabilityStatus ===
+          "demonstrated" &&
+        [
+          "accepted",
+          "edited",
+        ].includes(
+          c.reviewStatus
+        )
+    );
+
+  const confirmedGaps =
+    role.stagedCapabilities.filter(
+      (c: any) =>
+        c.capabilityStatus ===
+          "gap" &&
+        c.assessmentStatus ===
+          "assessed"
+    );
+
+  const check =
+    await finalSubmissionCheck(
+      role,
+      approved,
+      confirmedGaps,
+      answers.rows
+    );
 
   const emerging: any[] = [];
-  for (const item of check.emergingCapabilities) {
-    if (!item?.competency?.trim()) continue;
-    const already = role.stagedCapabilities.some((c: any) => nameMatches(c.proposedCompetencyName, item.competency));
-    if (!already) emerging.push(mapCapability(await stageCapability(roleAssessmentId, { name: item.competency, sourceType: "assessment", sourceSection: "Submission validation", evidence: item.evidence || "", confidence: item.confidence, demonstrated: true, capabilityStatus: "demonstrated", assessmentStatus: "assessed", reviewStatus: "proposed" })));
+
+  for (
+    const item of
+      check.emergingCapabilities
+  ) {
+    if (
+      !item?.competency?.trim()
+    )
+      continue;
+
+    const already =
+      role.stagedCapabilities.some(
+        (c: any) =>
+          nameMatches(
+            c.proposedCompetencyName,
+            item.competency
+          )
+      );
+
+    if (!already) {
+      emerging.push(
+        mapCapability(
+          await stageCapability(
+            roleAssessmentId,
+            {
+              name:
+                item.competency,
+              sourceType:
+                "assessment",
+              sourceSection:
+                "Submission validation",
+              evidence:
+                item.evidence ||
+                "",
+              confidence:
+                item.confidence,
+              demonstrated: true,
+              capabilityStatus:
+                "demonstrated",
+              assessmentStatus:
+                "assessed",
+              reviewStatus:
+                "proposed",
+            }
+          )
+        )
+      );
+    }
   }
-  if (check.clarifications.length) await replaceOpenQuestions(roleAssessmentId, check.clarifications);
 
-  if (emerging.length || check.clarifications.length) {
-    await sql`UPDATE career_role_assessments SET lifecycle_status=${check.clarifications.length ? "in_progress" : "review_ready"}, updated_at=NOW() WHERE id=${roleAssessmentId}`;
-    const refreshed = await getRolePayload(roleAssessmentId);
-    return NextResponse.json({ success: true, roleAssessmentId, lifecycleStatus: refreshed.lifecycleStatus, emergingCapabilities: emerging, gaps: refreshed.gaps, requiresFurtherClarification: refreshed.gaps.length > 0, message: "Submission identified additional intelligence. Complete the new review items before resubmitting this role." });
+  if (
+    check.clarifications.length
+  ) {
+    await replaceOpenQuestions(
+      roleAssessmentId,
+      check.clarifications
+    );
   }
 
-  const promotedCapabilityCount = await promoteRole(userId, roleAssessmentId);
-  await sql`UPDATE career_role_assessments SET lifecycle_status='completed', completed_at=NOW(), updated_at=NOW() WHERE id=${roleAssessmentId}`;
-  const parent = await sql`SELECT assessment_id, sequence_no FROM career_role_assessments WHERE id=${roleAssessmentId}`;
-  const assessmentId = String(parent.rows[0].assessment_id);
-  const sequenceNo = Number(parent.rows[0].sequence_no);
+  if (
+    emerging.length ||
+    check.clarifications.length
+  ) {
+    await sql`
+      UPDATE career_role_assessments
+      SET lifecycle_status=${
+        check.clarifications.length
+          ? "in_progress"
+          : "review_ready"
+      },
+      updated_at=NOW()
+      WHERE id=${roleAssessmentId}
+    `;
 
-  // Activate the next role in sequence once the current role completes.
+    const refreshed =
+      await getRolePayload(
+        roleAssessmentId
+      );
+
+    return NextResponse.json({
+      success: true,
+      roleAssessmentId,
+      lifecycleStatus:
+        refreshed.lifecycleStatus,
+      emergingCapabilities:
+        emerging,
+      gaps:
+        refreshed.gaps,
+      requiresFurtherClarification:
+        refreshed.gaps.length > 0,
+      message:
+        "Submission identified additional intelligence. Complete the new review items before resubmitting this role.",
+    });
+  }
+
+  const promotedCapabilityCount =
+    await promoteRole(
+      userId,
+      roleAssessmentId
+    );
+
   await sql`
     UPDATE career_role_assessments
-    SET lifecycle_status='in_progress', updated_at=NOW()
+    SET
+      lifecycle_status='completed',
+      completed_at=NOW(),
+      updated_at=NOW()
+    WHERE id=${roleAssessmentId}
+  `;
+
+  const parent =
+    await sql`
+      SELECT
+        assessment_id,
+        sequence_no
+      FROM career_role_assessments
+      WHERE id=${roleAssessmentId}
+    `;
+
+  const assessmentId =
+    String(
+      parent.rows[0].assessment_id
+    );
+
+  const sequenceNo =
+    Number(
+      parent.rows[0].sequence_no
+    );
+
+  await sql`
+    UPDATE career_role_assessments
+    SET
+      lifecycle_status='in_progress',
+      updated_at=NOW()
     WHERE assessment_id=${assessmentId}
       AND sequence_no=${sequenceNo + 1}
       AND lifecycle_status='not_started'
   `;
-  const remaining = await sql`SELECT COUNT(*)::int AS count FROM career_role_assessments WHERE assessment_id=${assessmentId} AND lifecycle_status <> 'completed'`;
-  if (Number(remaining.rows[0].count) === 0) await sql`UPDATE career_assessments SET status='completed', completed_at=NOW(), updated_at=NOW() WHERE id=${assessmentId}`;
-  return NextResponse.json({ success: true, roleAssessmentId, lifecycleStatus: "completed", promotedCapabilityCount, emergingCapabilities: [], gaps: [], requiresFurtherClarification: false, message: "Role submitted successfully." });
+
+  const remaining =
+    await sql`
+      SELECT COUNT(*)::int AS count
+      FROM career_role_assessments
+      WHERE assessment_id=${assessmentId}
+        AND lifecycle_status <> 'completed'
+    `;
+
+  if (
+    Number(
+      remaining.rows[0].count
+    ) === 0
+  ) {
+    await sql`
+      UPDATE career_assessments
+      SET
+        status='completed',
+        completed_at=NOW(),
+        updated_at=NOW()
+      WHERE id=${assessmentId}
+    `;
+  }
+
+  return NextResponse.json({
+    success: true,
+    roleAssessmentId,
+    lifecycleStatus:
+      "completed",
+    promotedCapabilityCount,
+    emergingCapabilities: [],
+    gaps: [],
+    requiresFurtherClarification:
+      false,
+    message:
+      "Role submitted successfully.",
+  });
 }
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request
+) {
   try {
-    const contentType = req.headers.get("content-type") || "";
-    if (contentType.toLowerCase().includes("multipart/form-data")) return await handleCVUpload(req);
-    if (!contentType.toLowerCase().includes("application/json")) return NextResponse.json({ error: "Unsupported Content-Type." }, { status: 415 });
+    const contentType =
+      req.headers.get(
+        "content-type"
+      ) || "";
 
-    const userId = await getAuthenticatedUserId();
-    const body = await req.json();
-    const action = String(body.action || "");
+    if (
+      contentType
+        .toLowerCase()
+        .includes(
+          "multipart/form-data"
+        )
+    ) {
+      return await handleCVUpload(
+        req
+      );
+    }
 
-    if (action === "assess_role") return await handleAssessRole(userId, body);
-    if (action === "review_capability") return await handleReviewCapability(userId, body);
-    if (action === "update_role_context") return await handleUpdateRole(userId, body);
-    if (action === "submit_role") return await handleSubmitRole(userId, body);
+    if (
+      !contentType
+        .toLowerCase()
+        .includes(
+          "application/json"
+        )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported Content-Type.",
+        },
+        { status: 415 }
+      );
+    }
 
-    return NextResponse.json({ error: `Unknown action "${action}".` }, { status: 400 });
+    const userId =
+      await getAuthenticatedUserId();
+
+    const body =
+      await req.json();
+
+    const action =
+      String(
+        body.action || ""
+      );
+
+    if (
+      action ===
+      "assess_role"
+    ) {
+      return await handleAssessRole(
+        userId,
+        body
+      );
+    }
+
+    if (
+      action ===
+      "review_capability"
+    ) {
+      return await handleReviewCapability(
+        userId,
+        body
+      );
+    }
+
+    if (
+      action ===
+      "update_role_context"
+    ) {
+      return await handleUpdateRole(
+        userId,
+        body
+      );
+    }
+
+    if (
+      action ===
+      "submit_role"
+    ) {
+      return await handleSubmitRole(
+        userId,
+        body
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error: `Unknown action "${action}".`,
+      },
+      { status: 400 }
+    );
   } catch (err) {
-    console.error("CAREER CV ROUTE ERROR", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    console.error(
+      "CAREER CV ROUTE ERROR",
+      err
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : String(err),
+      },
+      { status: 500 }
+    );
   }
 }

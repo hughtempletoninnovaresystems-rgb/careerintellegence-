@@ -60,16 +60,20 @@ import { useMemo, useState } from "react";
  *
  * API CONTRACT
  * ------------
- * The existing single-role backend will need to support:
+ * The existing backend supports:
  *
  *   analyse_cv_roles
+ *   start_manual
  *   assess_role
  *   review_capability
  *   update_role_context
  *   submit_role
  *
- * Endpoint names below intentionally preserve the current routes.
- * They can be changed centrally if Hugh consolidates the APIs.
+ * CV route:
+ *   /api/analyse-cv
+ *
+ * Manual / no-CV route:
+ *   /api/no-cv
  */
 
 const CV_ROUTE_ENDPOINT = "/api/analyse-cv";
@@ -998,10 +1002,6 @@ export default function CareerIntelligenceJourney() {
       /*
        * STEP 5
        * AI interpretation/enrichment.
-       *
-       * This represents the processing stage returned
-       * by the current API. It is deliberately shown as
-       * a separate stage from Knowledge Base matching.
        */
       setCvProcessingStep(4);
       setCvProgress(82);
@@ -1029,16 +1029,8 @@ export default function CareerIntelligenceJourney() {
 
       setCurrentRoleIndex(0);
 
-      /*
-       * Processing is genuinely complete because
-       * the API response has been received and the
-       * roles have been placed into the workspace.
-       */
       setCvProgress(100);
 
-      /*
-       * 6 means every processing step is complete.
-       */
       setCvProcessingStep(
         CV_PROCESSING_STEPS.length
       );
@@ -2079,10 +2071,6 @@ export default function CareerIntelligenceJourney() {
 
                 </div>
 
-                {/* ==================================================
-                    PROGRESS BAR
-                ================================================== */}
-
                 <div
                   className="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-200"
                   role="progressbar"
@@ -2102,10 +2090,6 @@ export default function CareerIntelligenceJourney() {
 
                 </div>
 
-                {/* ==================================================
-                    CURRENT PROCESS
-                ================================================== */}
-
                 <p className="mt-3 text-sm font-medium text-slate-700">
                   {cvProcessingStep >=
                   CV_PROCESSING_STEPS.length
@@ -2115,10 +2099,6 @@ export default function CareerIntelligenceJourney() {
                       ]?.label ||
                       "Preparing your career review..."}
                 </p>
-
-                {/* ==================================================
-                    PROCESSING STEPS
-                ================================================== */}
 
                 <div className="mt-5 space-y-3">
 
@@ -2150,8 +2130,6 @@ export default function CareerIntelligenceJourney() {
                           }`}
                         >
 
-                          {/* STATUS ICON */}
-
                           <div
                             className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                               complete
@@ -2173,8 +2151,6 @@ export default function CareerIntelligenceJourney() {
                             )}
 
                           </div>
-
-                          {/* PROCESS DESCRIPTION */}
 
                           <div className="flex-1">
 
@@ -3130,8 +3106,9 @@ export default function CareerIntelligenceJourney() {
                   Review all capability
                   intelligence identified for
                   this role. Accepted and edited
-                  items can be promoted when
-                  the role is finally submitted.
+                  items will be added to your
+                  profile when the role is
+                  finally submitted.
                 </p>
 
               </div>
