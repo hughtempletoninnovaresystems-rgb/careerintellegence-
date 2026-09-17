@@ -7,7 +7,9 @@
     "prettier:check": "prettier --check --ignore-unknown .",
     "start": "next start",
     "seed": "node -r dotenv/config ./scripts/seed.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --test tests/career-intelligence/*.test.ts",
+    "verify:ci-structure": "node scripts/verify-career-intelligence-structure.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.13.0",

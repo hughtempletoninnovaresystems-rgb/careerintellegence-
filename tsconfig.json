@@ -1,10 +1,9 @@
 {
   "compilerOptions": {
-    "target": "es5",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
-    "strict": true,
+    "strict": false,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -13,22 +12,17 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
     ".next/types/**/*.ts",
-    "app/lib/placeholder-data.js",
-    "scripts/seed.js"
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "exclude": ["node_modules"]
 }

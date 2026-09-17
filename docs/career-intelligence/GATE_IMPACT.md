@@ -1,0 +1,12 @@
+# Production Readiness Gate Impact — Baseline Restructure Increment 1
+
+No Production Readiness Gate is declared passed by this increment.
+
+| Gate | Increment impact | Evidence produced | Remaining evidence/work |
+| --- | --- | --- | --- |
+| **Gate 1 — Architecture and separation** | Direct | Current/target architecture; shared auth/data/AI/domain/application-service boundaries; CV/manual routes reduced to acquisition/HTTP adapters; migration plan | Final dependency catalogue; complete remaining SQL extraction where valuable; formal architecture approval |
+| **Gate 2 — Credentials, secrets and exposure** | Review/remediation | AI provider constructed only in server module; source-tree scan found no embedded secret values in supplied working tree; no server-secret references in UI | Repository-history scan; credential register/owners; deployed browser-bundle inspection; rotation evidence where applicable |
+| **Gate 3 — Authentication, authorisation and data access** | Direct | Shared server authentication; object-level ownership check for role mutations; mutation services use authenticated user + owned role; approved-only CKM canonical matching | DB-backed negative auth/other-user tests; role/permission matrix; account recovery/session assessment; external/internal identifier decision |
+| **Gate 4 — Code quality and controlled development** | Direct | Common modules; duplicated clarification/review/context/submission/promotion logic removed from routes; request/output schemas; workflow/correlation tests; structural verification; technical docs/migration plan | Complete dependency-backed lint/type/build/test run; integration/E2E tests; peer review/change-control evidence; strict-mode remediation decision |
+| **Gate 5 — Reliability/failure handling** | Direct | AI timeout and schema validation; server request validation; CV size/type/text limits; safe errors; correlation IDs; explicit lifecycle transitions; completed-role replay; rejected CKM proposals not silently reactivated | Atomic promotion/clarification writes; first-submit concurrency/idempotency; provider abort/retry/rate/cost controls; monitoring/alerts; backup/recovery evidence |
+| **Gate 6 — Privacy/security/production approval** | Review | New logging excludes CV/evidence/prompt contents; safe errors avoid raw stack/query responses; transient document processing documented | End-to-end data flow; retention/deletion/export policy; dependency/vulnerability scan; targeted security testing; independent review and formal release decision |
