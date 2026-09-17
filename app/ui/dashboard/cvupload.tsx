@@ -1601,7 +1601,11 @@ export default function CVUpload() {
                 capabilityId:
                   capability.id,
 
-                action,
+                reviewStatus:
+                  action ===
+                  "accept"
+                    ? "accepted"
+                    : "rejected",
               }
             );
 
@@ -1777,8 +1781,8 @@ export default function CVUpload() {
                 capabilityId:
                   capability.id,
 
-                action:
-                  "edit",
+                reviewStatus:
+                  "edited",
 
                 name:
                   editedCapabilityName.trim(),
