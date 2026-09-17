@@ -2460,7 +2460,6 @@ export default function CVUpload() {
               className="rounded-xl border border-slate-300 p-6 text-left transition hover:border-slate-500 hover:bg-slate-50"
             >
               <p className="text-lg font-semibold text-slate-900">
-                I do not have a CV
               </p>
 
               <p className="mt-2 text-sm text-slate-600">
