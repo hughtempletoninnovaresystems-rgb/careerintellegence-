@@ -37,7 +37,12 @@ async function countUnreviewedDemonstratedCapabilities(roleAssessmentId: string)
     WHERE role_assessment_id=${roleAssessmentId}
       AND demonstrated=TRUE
       AND capability_status='demonstrated'
-      AND review_status='proposed'
+      AND (
+        assessment_status <> 'assessed'
+        OR assessment_status IS NULL
+        OR review_status IS NULL
+        OR review_status NOT IN ('accepted', 'rejected')
+      )
   `;
 
   return Number(result.rows[0]?.count || 0);

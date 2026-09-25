@@ -18,6 +18,15 @@ import { loadRoleAssessmentSnapshot } from "./role-snapshot";
  * item because partial write recovery must be designed against the deployed
  * PostgreSQL/runtime transaction facilities.
  */
+
+function isPromotionEligible(capability: any) {
+  return (
+    capability.capabilityStatus === "demonstrated" &&
+    capability.assessmentStatus === "assessed" &&
+    capability.reviewStatus === "accepted"
+  );
+}
+
 export async function promoteRoleToCandidateProfile({
   roleAssessmentId,
   userId,
@@ -29,10 +38,10 @@ export async function promoteRoleToCandidateProfile({
   const originalCanonicalRoleId = role.canonicalRoleId;
 
   const approvedProfileCapabilities = role.capabilities.filter(
-    (capability) =>
-      capability.capabilityStatus === "demonstrated" &&
-      (capability.reviewStatus === "accepted" ||
-        capability.reviewStatus === "edited"),
+  (capability) =>
+    capability.capabilityStatus === "demonstrated" &&
+    (capability.reviewStatus === "accepted" ||
+      capability.reviewStatus === "edited"),
   );
 
   const repositoryEnrichment = await proposeRepositoryKnowledge({
@@ -124,11 +133,7 @@ export async function promoteRoleToCandidateProfile({
     const name = capability.editedName || capability.proposedName;
     const evidence = capability.editedEvidence || capability.evidence || null;
 
-    if (
-      capability.capabilityStatus === "demonstrated" &&
-      (capability.reviewStatus === "accepted" ||
-        capability.reviewStatus === "edited")
-    ) {
+    if (isPromotionEligible(capability)) {
       const competencyId = capability.canonicalCompetencyId || null;
 
       await sql`
