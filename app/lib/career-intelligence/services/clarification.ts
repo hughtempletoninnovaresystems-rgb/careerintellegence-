@@ -10,6 +10,7 @@ import {
 import { AIProviderError, CareerIntelligenceError } from "../errors";
 import { recordSuccessGate } from "../success-gates";
 import type { Evaluation, Gap } from "../types";
+import { clamp } from "../utils";
 import { transitionRoleLifecycle } from "./role-lifecycle";
 import { loadRoleAssessmentSnapshot } from "./role-snapshot";
 
@@ -21,6 +22,14 @@ export type ClarificationAnswerInput = {
 type TrustedClarificationAnswer = ClarificationAnswerInput & {
   competency: string;
   question: string;
+};
+
+type StagedCapabilityIdentity = {
+  id: string;
+  canonicalCompetencyId: string | null;
+  name: string;
+  capabilityStatus: string;
+  assessmentStatus: string;
 };
 
 async function evaluateAnswers(
@@ -130,6 +139,85 @@ ${JSON.stringify(answers)}
   return answers.map((answer) => evaluationById.get(answer.questionId)!);
 }
 
+/*
+ * CI-DRWP-002
+ *
+ * Capability identity comparison for clarification resolution.
+ *
+ * Canonical competency identity takes precedence where available. For
+ * unresolved/non-canonical capabilities, compare the effective capability
+ * name: edited_competency_name || proposed_competency_name.
+ */
+function normaliseCapabilityName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function loadStagedCapabilityIdentities(
+  roleAssessmentId: string,
+): Promise<StagedCapabilityIdentity[]> {
+  const result = await sql`
+    SELECT
+      id,
+      canonical_competency_id,
+      COALESCE(
+        NULLIF(TRIM(edited_competency_name), ''),
+        proposed_competency_name
+      ) AS effective_name,
+      capability_status,
+      assessment_status
+    FROM career_role_capabilities
+    WHERE role_assessment_id=${roleAssessmentId}
+    ORDER BY created_at, id
+  `;
+
+  return result.rows.map((row) => ({
+    id: String(row.id),
+    canonicalCompetencyId: row.canonical_competency_id
+      ? String(row.canonical_competency_id)
+      : null,
+    name: String(row.effective_name || ""),
+    capabilityStatus: String(row.capability_status || ""),
+    assessmentStatus: String(row.assessment_status || ""),
+  }));
+}
+
+function findMatchingCapability(
+  staged: StagedCapabilityIdentity[],
+  name: string,
+  canonicalCompetencyId: string | null,
+  unresolvedOnly = false,
+) {
+  const normalisedName = normaliseCapabilityName(name);
+
+  return staged.find((capability) => {
+    if (
+      unresolvedOnly &&
+      capability.capabilityStatus !== "signal" &&
+      capability.assessmentStatus !== "needs_clarification"
+    ) {
+      return false;
+    }
+
+    if (
+      canonicalCompetencyId &&
+      capability.canonicalCompetencyId &&
+      canonicalCompetencyId === capability.canonicalCompetencyId
+    ) {
+      return true;
+    }
+
+    return (
+      Boolean(normalisedName) &&
+      normaliseCapabilityName(capability.name) === normalisedName
+    );
+  });
+}
+
 export async function assessRoleClarifications({
   userId,
   roleAssessmentId,
@@ -195,6 +283,16 @@ export async function assessRoleClarifications({
   const evaluations = await evaluateAnswers(role, trustedAnswers);
   const followUps: Gap[] = [];
 
+  /*
+   * Keep a local identity snapshot throughout this clarification pass.
+   *
+   * New capabilities staged below are added to this collection immediately so
+   * emerging intelligence from later evaluations cannot create duplicate
+   * staged identities during the same request.
+   */
+  const stagedCapabilities =
+    await loadStagedCapabilityIdentities(roleAssessmentId);
+
   for (let index = 0; index < trustedAnswers.length; index += 1) {
     const answer = trustedAnswers[index];
     const evaluation = evaluations[index];
@@ -228,40 +326,193 @@ export async function assessRoleClarifications({
       )
     `;
 
-    const capabilityName = evaluation.competency || answer.competency;
-    const canonical = await findCompetency(capabilityName);
+    const capabilityName =
+      evaluation.competency || answer.competency;
 
-    if (evaluation.status === "demonstrated" || evaluation.status === "gap") {
-      await stageCapability({
-        roleAssessmentId,
-        competencyId: canonical ? String(canonical.id) : null,
-        name: canonical ? String(canonical.name) : capabilityName,
-        sourceType: "clarification",
-        sourceSection: "candidate_answer",
-        evidence: evaluation.evidence,
-        confidence: evaluation.confidence,
-        demonstrated: evaluation.status === "demonstrated",
-        capabilityStatus:
-          evaluation.status === "demonstrated" ? "demonstrated" : "gap",
-        assessmentStatus: "assessed",
-      });
+    const canonical =
+      await findCompetency(capabilityName);
+
+    const canonicalCompetencyId =
+      canonical ? String(canonical.id) : null;
+
+    const effectiveCapabilityName =
+      canonical ? String(canonical.name) : capabilityName;
+
+    /*
+     * CI-DRWP-002:
+     *
+     * Resolve the signal that generated the clarification rather than
+     * automatically staging another capability with the same identity.
+     */
+    const existingSignal = findMatchingCapability(
+      stagedCapabilities,
+      effectiveCapabilityName,
+      canonicalCompetencyId,
+      true,
+    );
+
+    if (evaluation.status === "demonstrated") {
+      if (existingSignal) {
+        await sql`
+          UPDATE career_role_capabilities
+          SET
+            canonical_competency_id=COALESCE(
+              ${canonicalCompetencyId},
+              canonical_competency_id
+            ),
+            evidence=${evaluation.evidence || null},
+            ai_confidence=${clamp(evaluation.confidence)},
+            demonstrated=TRUE,
+            capability_status='demonstrated',
+            assessment_status='assessed',
+            review_status='proposed',
+            updated_at=NOW()
+          WHERE id=${existingSignal.id}
+            AND role_assessment_id=${roleAssessmentId}
+        `;
+
+        existingSignal.canonicalCompetencyId =
+          canonicalCompetencyId ||
+          existingSignal.canonicalCompetencyId;
+
+        existingSignal.name = effectiveCapabilityName;
+        existingSignal.capabilityStatus = "demonstrated";
+        existingSignal.assessmentStatus = "assessed";
+      } else {
+        const capabilityId = await stageCapability({
+          roleAssessmentId,
+          competencyId: canonicalCompetencyId,
+          name: effectiveCapabilityName,
+          sourceType: "clarification",
+          sourceSection: "candidate_answer",
+          evidence: evaluation.evidence,
+          confidence: evaluation.confidence,
+          demonstrated: true,
+          capabilityStatus: "demonstrated",
+          assessmentStatus: "assessed",
+        });
+
+        if (capabilityId) {
+          stagedCapabilities.push({
+            id: capabilityId,
+            canonicalCompetencyId,
+            name: effectiveCapabilityName,
+            capabilityStatus: "demonstrated",
+            assessmentStatus: "assessed",
+          });
+        }
+      }
+    }
+
+    if (evaluation.status === "gap") {
+      if (existingSignal) {
+        await sql`
+          UPDATE career_role_capabilities
+          SET
+            canonical_competency_id=COALESCE(
+              ${canonicalCompetencyId},
+              canonical_competency_id
+            ),
+            evidence=${evaluation.evidence || null},
+            ai_confidence=${clamp(evaluation.confidence)},
+            demonstrated=FALSE,
+            capability_status='gap',
+            assessment_status='assessed',
+            review_status='accepted',
+            updated_at=NOW()
+          WHERE id=${existingSignal.id}
+            AND role_assessment_id=${roleAssessmentId}
+        `;
+
+        existingSignal.canonicalCompetencyId =
+          canonicalCompetencyId ||
+          existingSignal.canonicalCompetencyId;
+
+        existingSignal.name = effectiveCapabilityName;
+        existingSignal.capabilityStatus = "gap";
+        existingSignal.assessmentStatus = "assessed";
+      } else {
+        /*
+         * stageCapability() deliberately defaults review_status to proposed.
+         * A confirmed gap is already accepted by the clarification lifecycle,
+         * so set it to accepted immediately after insertion.
+         */
+        const capabilityId = await stageCapability({
+          roleAssessmentId,
+          competencyId: canonicalCompetencyId,
+          name: effectiveCapabilityName,
+          sourceType: "clarification",
+          sourceSection: "candidate_answer",
+          evidence: evaluation.evidence,
+          confidence: evaluation.confidence,
+          demonstrated: false,
+          capabilityStatus: "gap",
+          assessmentStatus: "assessed",
+        });
+
+        if (capabilityId) {
+          await sql`
+            UPDATE career_role_capabilities
+            SET
+              review_status='accepted',
+              updated_at=NOW()
+            WHERE id=${capabilityId}
+              AND role_assessment_id=${roleAssessmentId}
+          `;
+
+          stagedCapabilities.push({
+            id: capabilityId,
+            canonicalCompetencyId,
+            name: effectiveCapabilityName,
+            capabilityStatus: "gap",
+            assessmentStatus: "assessed",
+          });
+        }
+      }
     }
 
     if (evaluation.status === "needs_clarification") {
+      /*
+       * Deliberately do not mutate the existing signal. Its unresolved
+       * lifecycle is retained while the focused follow-up is created.
+       */
       followUps.push({
-        competency: capabilityName,
-        reason: evaluation.followUpReason || "Further evidence is required.",
+        competency: effectiveCapabilityName,
+        reason:
+          evaluation.followUpReason ||
+          "Further evidence is required.",
         question: evaluation.followUpQuestion!,
       });
     }
 
+    /*
+     * Emerging capabilities remain new intelligence, but must not create a
+     * duplicate staged identity.
+     */
     for (const emerging of evaluation.emergingCapabilities || []) {
-      const mapped = await findCompetency(emerging.name);
+      const mapped =
+        await findCompetency(emerging.name);
 
-      await stageCapability({
+      const mappedCompetencyId =
+        mapped ? String(mapped.id) : null;
+
+      const emergingName =
+        mapped ? String(mapped.name) : emerging.name;
+
+      const existingEmerging = findMatchingCapability(
+        stagedCapabilities,
+        emergingName,
+        mappedCompetencyId,
+      );
+
+      if (existingEmerging) {
+        continue;
+      }
+
+      const capabilityId = await stageCapability({
         roleAssessmentId,
-        competencyId: mapped ? String(mapped.id) : null,
-        name: mapped ? String(mapped.name) : emerging.name,
+        competencyId: mappedCompetencyId,
+        name: emergingName,
         sourceType: "clarification",
         sourceSection: "emerging_capability",
         evidence: emerging.evidence,
@@ -270,6 +521,16 @@ export async function assessRoleClarifications({
         capabilityStatus: "demonstrated",
         assessmentStatus: "assessed",
       });
+
+      if (capabilityId) {
+        stagedCapabilities.push({
+          id: capabilityId,
+          canonicalCompetencyId: mappedCompetencyId,
+          name: emergingName,
+          capabilityStatus: "demonstrated",
+          assessmentStatus: "assessed",
+        });
+      }
     }
   }
 
