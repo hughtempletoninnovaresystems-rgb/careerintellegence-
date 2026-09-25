@@ -809,6 +809,12 @@ export default function CVUpload() {
       File | null
     >(null);
 
+  const [
+    roleContextEditing,
+    setRoleContextEditing,
+  ] =
+    useState(true);
+
   /* ============================================================
      DERIVED STATE
   ============================================================ */
@@ -1114,6 +1120,10 @@ export default function CVUpload() {
         0
       );
 
+      setRoleContextEditing(
+        true
+      );
+
       setSuccessGates(
         extractSuccessGates(
           data
@@ -1321,6 +1331,10 @@ export default function CVUpload() {
 
       setCurrentRoleIndex(
         0
+      );
+
+      setRoleContextEditing(
+        true
       );
 
       setSuccessGates(
@@ -2118,6 +2132,10 @@ export default function CVUpload() {
         );
       }
 
+      setRoleContextEditing(
+        false
+      );
+
       setMessage(
         "Role context updated."
       );
@@ -2238,6 +2256,10 @@ export default function CVUpload() {
             )
         );
 
+        setRoleContextEditing(
+          true
+        );
+
         setCurrentRoleIndex(
           nextIndex >= 0
             ? nextIndex
@@ -2274,6 +2296,10 @@ export default function CVUpload() {
           1 <
         roles.length
       ) {
+        setRoleContextEditing(
+          true
+        );
+
         setCurrentRoleIndex(
           currentRoleIndex +
             1
@@ -2896,201 +2922,272 @@ export default function CVUpload() {
       {/* ROLE CONTEXT */}
 
       <section className="mt-6 rounded-xl border bg-white p-6">
-        <h2 className="text-lg font-semibold">
-          Review your role
-          information
-        </h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-lg font-semibold">
+            Review your role information
+          </h2>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label>
-            <span className="text-sm">
-              Organisation
-            </span>
-
-            <input
-              value={
-                currentRole.organisation
-              }
-              onChange={(
-                e
-              ) =>
-                updateCurrentRole(
-                  "organisation",
-                  e.target
-                    .value
-                )
-              }
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-
-          <label>
-            <span className="text-sm">
-              Role title
-            </span>
-
-            <input
-              value={
-                currentRole.roleTitle
-              }
-              onChange={(
-                e
-              ) =>
-                updateCurrentRole(
-                  "roleTitle",
-                  e.target
-                    .value
-                )
-              }
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-
-          <label>
-            <span className="text-sm">
-              From
-            </span>
-
-            <input
-              type="date"
-              value={
-                currentRole.fromDate ??
-                ""
-              }
-              onChange={(
-                e
-              ) => {
-                updateCurrentRole(
-                  "fromDate",
-                  e.target
-                    .value
-                );
-
-                updateCurrentRole(
-                  "fromDatePrecision",
-                  e.target.value
-                    ? "day"
-                    : "unknown"
-                );
-
-                updateCurrentRole(
-                  "fromDateOriginal",
-                  e.target
-                    .value
-                );
-              }}
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-
-          <div>
-            <span className="text-sm">
-              To
-            </span>
-
-            <input
-              type="date"
-              value={
-                currentRole
-                  .toDatePrecision ===
-                "ongoing"
-                  ? ""
-                  : currentRole.toDate ??
-                    ""
-              }
-              disabled={
-                currentRole
-                  .toDatePrecision ===
-                "ongoing"
-              }
-              onChange={(
-                e
-              ) => {
-                updateCurrentRole(
-                  "toDate",
-                  e.target
-                    .value
-                );
-
-                updateCurrentRole(
-                  "toDatePrecision",
-                  e.target.value
-                    ? "day"
-                    : "unknown"
-                );
-
-                updateCurrentRole(
-                  "toDateOriginal",
-                  e.target
-                    .value
-                );
-              }}
-              className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100"
-            />
-
-            <label className="mt-2 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={
-                  currentRole
-                    .toDatePrecision ===
-                  "ongoing"
-                }
-                onChange={(
-                  e
-                ) =>
-                  setCurrentRoleOngoing(
-                    e.target
-                      .checked
+          {!roleContextEditing &&
+            currentRole.lifecycleStatus !==
+              "completed" && (
+              <button
+                type="button"
+                onClick={() =>
+                  setRoleContextEditing(
+                    true
                   )
                 }
-              />
-
-              <span className="text-sm">
-                Current role
-              </span>
-            </label>
-
-            {currentRole
-              .toDatePrecision ===
-              "ongoing" && (
-              <p className="mt-1 text-sm font-semibold text-slate-600">
-                Present
-              </p>
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Edit Role Context
+              </button>
             )}
-          </div>
         </div>
 
-        <textarea
-          rows={7}
-          value={
-            currentRole.description
-          }
-          onChange={(
-            e
-          ) =>
-            updateCurrentRole(
-              "description",
-              e.target
-                .value
-            )
-          }
-          className="mt-4 w-full rounded-lg border px-3 py-2"
-        />
+        {roleContextEditing &&
+        currentRole.lifecycleStatus !==
+          "completed" ? (
+          <>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="text-sm">
+                  Organisation
+                </span>
 
-        <button
-          type="button"
-          onClick={
-            saveRoleContext
-          }
-          disabled={
-            loading
-          }
-          className="mt-4 rounded-lg border px-4 py-2"
-        >
-          Save role
-          context
-        </button>
+                <input
+                  value={
+                    currentRole.organisation
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    updateCurrentRole(
+                      "organisation",
+                      e.target.value
+                    )
+                  }
+                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                />
+              </label>
+
+              <label>
+                <span className="text-sm">
+                  Role title
+                </span>
+
+                <input
+                  value={
+                    currentRole.roleTitle
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    updateCurrentRole(
+                      "roleTitle",
+                      e.target.value
+                    )
+                  }
+                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                />
+              </label>
+
+              <label>
+                <span className="text-sm">
+                  From
+                </span>
+
+                <input
+                  type="date"
+                  value={
+                    currentRole.fromDate ??
+                    ""
+                  }
+                  onChange={(
+                    e
+                  ) => {
+                    updateCurrentRole(
+                      "fromDate",
+                      e.target.value
+                    );
+
+                    updateCurrentRole(
+                      "fromDatePrecision",
+                      e.target.value
+                        ? "day"
+                        : "unknown"
+                    );
+
+                    updateCurrentRole(
+                      "fromDateOriginal",
+                      e.target.value
+                    );
+                  }}
+                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                />
+              </label>
+
+              <div>
+                <span className="text-sm">
+                  To
+                </span>
+
+                <input
+                  type="date"
+                  value={
+                    currentRole
+                      .toDatePrecision ===
+                    "ongoing"
+                      ? ""
+                      : currentRole.toDate ??
+                        ""
+                  }
+                  disabled={
+                    currentRole
+                      .toDatePrecision ===
+                    "ongoing"
+                  }
+                  onChange={(
+                    e
+                  ) => {
+                    updateCurrentRole(
+                      "toDate",
+                      e.target.value
+                    );
+
+                    updateCurrentRole(
+                      "toDatePrecision",
+                      e.target.value
+                        ? "day"
+                        : "unknown"
+                    );
+
+                    updateCurrentRole(
+                      "toDateOriginal",
+                      e.target.value
+                    );
+                  }}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100"
+                />
+
+                <label className="mt-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={
+                      currentRole
+                        .toDatePrecision ===
+                      "ongoing"
+                    }
+                    onChange={(
+                      e
+                    ) =>
+                      setCurrentRoleOngoing(
+                        e.target.checked
+                      )
+                    }
+                  />
+
+                  <span className="text-sm">
+                    Current role
+                  </span>
+                </label>
+
+                {currentRole
+                  .toDatePrecision ===
+                  "ongoing" && (
+                  <p className="mt-1 text-sm font-semibold text-slate-600">
+                    Present
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <textarea
+              rows={7}
+              value={
+                currentRole.description
+              }
+              onChange={(
+                e
+              ) =>
+                updateCurrentRole(
+                  "description",
+                  e.target.value
+                )
+              }
+              className="mt-4 w-full rounded-lg border px-3 py-2"
+            />
+
+            <button
+              type="button"
+              onClick={
+                saveRoleContext
+              }
+              disabled={
+                loading
+              }
+              className="mt-4 rounded-lg border px-4 py-2"
+            >
+              Save role context
+            </button>
+          </>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Organisation
+                </p>
+                <p className="font-medium">
+                  {currentRole.organisation}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  Role title
+                </p>
+                <p className="font-medium">
+                  {currentRole.roleTitle}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  From
+                </p>
+                <p className="font-medium">
+                  {currentRole.fromDateOriginal ||
+                    currentRole.fromDate ||
+                    "Not specified"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  To
+                </p>
+                <p className="font-medium">
+                  {currentRole.toDatePrecision ===
+                  "ongoing"
+                    ? "Present"
+                    : currentRole.toDateOriginal ||
+                      currentRole.toDate ||
+                      "Not specified"}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-500">
+                Role description
+              </p>
+              <p className="whitespace-pre-wrap font-medium">
+                {currentRole.description ||
+                  "Not specified"}
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* QUESTIONS */}
