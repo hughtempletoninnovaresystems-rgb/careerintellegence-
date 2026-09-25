@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/app/lib/career-intelligence/auth";
-import { findCanonicalRole, findCompetency, getRoleCompetencies } from "@/app/lib/career-intelligence/data/repository";
+import { findCanonicalRole, findCompetency, getRoleCompetencies, verifyRoleOwnership } from "@/app/lib/career-intelligence/data/repository";
 import { createCareerAssessment, createCareerRoleAssessment } from "@/app/lib/career-intelligence/data/assessments";
 import { addClarificationRound as replaceOpenQuestions, stageCapability } from "@/app/lib/career-intelligence/data/staging";
 import { generateValidatedJson } from "@/app/lib/career-intelligence/ai/provider";
@@ -18,6 +18,10 @@ import { submitRoleForProfile } from "@/app/lib/career-intelligence/services/rol
 import { getManualRolePayload } from "@/app/lib/career-intelligence/services/role-snapshot";
 import type { DatePrecision, ExtractedCapability, Gap } from "@/app/lib/career-intelligence/types";
 import { CAPABILITY_IDENTITY_RULES, EVIDENCE_ASSESSMENT_RULES } from "@/app/lib/career-intelligence/domain/intelligence-contract";
+import { sql } from "@vercel/postgres";
+import { z } from "zod";
+
+import { CareerIntelligenceError } from "@/app/lib/career-intelligence/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -710,6 +714,689 @@ async function handleAssessRole(
    CAPABILITY REVIEW
 ============================================================ */
 
+const editedCapabilityReassessmentSchema = z.object({
+  outcome: z.enum([
+    "demonstrated",
+    "needs_clarification",
+    "clarify",
+    "gap",
+  ]),
+
+  evidence: z
+    .string()
+    .min(1),
+
+  confidence: z
+    .number()
+    .min(0)
+    .max(1),
+
+  clarification: z
+    .object({
+      reason: z
+        .string()
+        .default(
+          "Additional evidence is required."
+        ),
+
+      question: z
+        .string()
+        .min(1),
+    })
+    .nullable()
+    .optional(),
+
+  emergingCapabilities: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .min(1),
+
+        evidence: z
+          .string()
+          .min(1),
+
+        confidence: z
+          .number()
+          .min(0)
+          .max(1),
+      })
+    )
+    .default([]),
+});
+
+
+function normaliseCapabilityIdentity(
+  value: string
+) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(
+      /[^\p{L}\p{N}]+/gu,
+      " "
+    )
+    .trim();
+}
+
+
+async function reassessEditedCapability({
+  userId,
+  roleAssessmentId,
+  capabilityId,
+  editedCompetencyName,
+  editedEvidence,
+}: {
+  userId: string;
+  roleAssessmentId: string;
+  capabilityId: string;
+  editedCompetencyName:
+    | string
+    | null
+    | undefined;
+  editedEvidence:
+    | string
+    | null
+    | undefined;
+}) {
+  const competencyName =
+    String(
+      editedCompetencyName ||
+        ""
+    ).trim();
+
+  const evidence =
+    String(
+      editedEvidence ||
+        ""
+    ).trim();
+
+  if (!competencyName) {
+    throw new CareerIntelligenceError(
+      "Capability name is required when editing.",
+      {
+        status: 400,
+        code:
+          "edited_capability_name_required",
+        expose: true,
+      }
+    );
+  }
+
+  if (!evidence) {
+    throw new CareerIntelligenceError(
+      "Capability evidence is required when editing.",
+      {
+        status: 400,
+        code:
+          "edited_capability_evidence_required",
+        expose: true,
+      }
+    );
+  }
+
+  /*
+   * Verify ownership before reading or
+   * reassessing any role intelligence.
+   */
+  const assessmentId =
+    await verifyRoleOwnership(
+      roleAssessmentId,
+      userId
+    );
+
+  /*
+   * Ensure that the capability belongs to
+   * this role before spending an AI call.
+   */
+  const existingCapability =
+    await sql`
+      SELECT id
+      FROM career_role_capabilities
+      WHERE id = ${capabilityId}
+        AND role_assessment_id =
+          ${roleAssessmentId}
+      LIMIT 1
+    `;
+
+  if (
+    !existingCapability
+      .rows.length
+  ) {
+    throw new CareerIntelligenceError(
+      "Capability not found.",
+      {
+        status: 404,
+        code:
+          "capability_not_found",
+        expose: true,
+      }
+    );
+  }
+
+  const role =
+    await getRolePayload(
+      roleAssessmentId
+    );
+
+  const roleTitle =
+    String(
+      role?.roleTitle ||
+        ""
+    ).trim();
+
+  /*
+   * Candidate edit = new intelligence.
+   *
+   * It must be reassessed independently
+   * rather than inheriting the previous
+   * demonstrated state.
+   */
+  const reassessment =
+    await generateValidatedJson({
+      schema:
+        editedCapabilityReassessmentSchema,
+
+      prompt: `
+You are GIAS reassessing candidate-edited capability evidence.
+
+A candidate has edited previously assessed career intelligence.
+The edit is new intelligence and MUST be reassessed from the evidence supplied below.
+Do not preserve or infer the previous assessment outcome.
+
+${CAPABILITY_IDENTITY_RULES}
+
+${EVIDENCE_ASSESSMENT_RULES}
+
+CANDIDATE-OWNED EVIDENCE RULE:
+- Write evidence in first-person candidate voice (for example, "I diagnosed...", not "The candidate diagnosed...").
+- Do not introduce "the candidate", "they", "he" or "she" unless reproducing an attributable third-party source.
+- Improve clarity only; do not alter ownership, scope, certainty, strength or substantive meaning of the source evidence.
+- Never invent evidence.
+
+Return JSON only:
+
+{
+  "outcome": "demonstrated | needs_clarification | gap",
+  "evidence": "",
+  "confidence": 0.0,
+  "clarification": {
+    "reason": "",
+    "question": ""
+  },
+  "emergingCapabilities": [
+    {
+      "name": "",
+      "evidence": "",
+      "confidence": 0.0
+    }
+  ]
+}
+
+ASSESSMENT RULES:
+
+- "demonstrated":
+  The edited evidence directly supports the edited capability.
+  Return a faithful first-person evidence statement and confidence.
+
+- "needs_clarification":
+  There is a plausible capability signal, but the supplied evidence is not yet sufficient to classify it as demonstrated or as an assessed gap.
+  Return ONE focused clarification question asking only for the missing evidence.
+
+- "gap":
+  The evidence does not establish the edited capability and further clarification would not reasonably resolve the supplied evidence as demonstrated.
+  Do not treat it as demonstrated.
+
+- emergingCapabilities may contain ONLY capabilities independently evidenced by the supplied edit.
+- Do not create an emerging capability merely by renaming, decomposing or rephrasing the edited capability.
+- Each emerging capability must have its own independently sufficient evidence.
+- Do not duplicate the edited capability.
+- Do not invent experience.
+- Confidence must be between 0 and 1.
+
+Role title:
+${roleTitle}
+
+Edited capability:
+${competencyName}
+
+Candidate-edited evidence:
+${evidence}
+`,
+    });
+
+  const outcome =
+    reassessment.outcome ===
+    "clarify"
+      ? "needs_clarification"
+      : reassessment.outcome;
+
+  const assessedEvidence =
+    reassessment
+      .evidence
+      .trim();
+
+  const confidence =
+    clamp(
+      Number(
+        reassessment.confidence
+      )
+    );
+
+  /*
+   * Resolve the edited identity separately
+   * from evidence assessment.
+   */
+  const canonical =
+    await findCompetency(
+      competencyName
+    );
+
+  const canonicalCompetencyId =
+    canonical
+      ? String(
+          canonical.id
+        )
+      : null;
+
+  /*
+   * AUTHORITATIVE CAPABILITY WRITE
+   *
+   * This MUST happen before success-gate
+   * metadata is recorded.
+   */
+  if (
+    outcome ===
+    "demonstrated"
+  ) {
+    await sql`
+      UPDATE career_role_capabilities
+      SET
+        edited_competency_name =
+          ${competencyName},
+        edited_evidence =
+          ${evidence},
+        canonical_competency_id =
+          ${canonicalCompetencyId},
+        evidence =
+          ${assessedEvidence},
+        ai_confidence =
+          ${confidence},
+        demonstrated = TRUE,
+        capability_status =
+          'demonstrated',
+        assessment_status =
+          'assessed',
+        review_status =
+          'proposed',
+        updated_at = NOW()
+      WHERE id =
+        ${capabilityId}
+        AND role_assessment_id =
+          ${roleAssessmentId}
+    `;
+  } else if (
+    outcome ===
+    "needs_clarification"
+  ) {
+    await sql`
+      UPDATE career_role_capabilities
+      SET
+        edited_competency_name =
+          ${competencyName},
+        edited_evidence =
+          ${evidence},
+        canonical_competency_id =
+          ${canonicalCompetencyId},
+        assessment_status =
+          'needs_clarification',
+        review_status =
+          'proposed',
+        updated_at = NOW()
+      WHERE id =
+        ${capabilityId}
+        AND role_assessment_id =
+          ${roleAssessmentId}
+    `;
+
+    const clarification =
+      reassessment.clarification;
+
+    if (
+      !clarification
+        ?.question
+        ?.trim()
+    ) {
+      throw new Error(
+        "GIAS reassessment returned needs_clarification without a clarification question."
+      );
+    }
+
+    await replaceOpenQuestions(
+      roleAssessmentId,
+      [
+        {
+          competency:
+            competencyName,
+
+          reason:
+            clarification
+              .reason
+              ?.trim() ||
+            "Additional evidence is required.",
+
+          question:
+            clarification
+              .question
+              .trim(),
+        },
+      ]
+    );
+
+    await transitionRoleLifecycle({
+      roleAssessmentId,
+      to: "in_progress",
+    });
+  } else {
+    /*
+     * Approved CR-001 gap behaviour:
+     *
+     * - assessed
+     * - explicitly non-demonstrated
+     * - resolved as an accepted gap
+     *
+     * It can therefore never satisfy
+     * demonstrated-capability promotion.
+     */
+    await sql`
+      UPDATE career_role_capabilities
+      SET
+        edited_competency_name =
+          ${competencyName},
+        edited_evidence =
+          ${evidence},
+        canonical_competency_id =
+          ${canonicalCompetencyId},
+        evidence =
+          ${assessedEvidence},
+        ai_confidence =
+          ${confidence},
+        demonstrated = FALSE,
+        capability_status =
+          'gap',
+        assessment_status =
+          'assessed',
+        review_status =
+          'accepted',
+        updated_at = NOW()
+      WHERE id =
+        ${capabilityId}
+        AND role_assessment_id =
+          ${roleAssessmentId}
+    `;
+  }
+
+  /*
+   * Stage genuinely independent emerging
+   * intelligence.
+   *
+   * Read identities AFTER the authoritative
+   * row above has been written so that the
+   * edited identity itself participates in
+   * de-duplication.
+   */
+  const existingIdentities =
+    await sql`
+      SELECT
+        canonical_competency_id,
+        proposed_competency_name,
+        edited_competency_name
+      FROM career_role_capabilities
+      WHERE role_assessment_id =
+        ${roleAssessmentId}
+    `;
+
+  const canonicalIds =
+    new Set<string>();
+
+  const names =
+    new Set<string>();
+
+  for (
+    const row of
+    existingIdentities.rows
+  ) {
+    if (
+      row
+        .canonical_competency_id
+    ) {
+      canonicalIds.add(
+        String(
+          row
+            .canonical_competency_id
+        )
+      );
+    }
+
+    const proposedName =
+      String(
+        row
+          .proposed_competency_name ||
+          ""
+      ).trim();
+
+    const editedName =
+      String(
+        row
+          .edited_competency_name ||
+          ""
+      ).trim();
+
+    if (proposedName) {
+      names.add(
+        normaliseCapabilityIdentity(
+          proposedName
+        )
+      );
+    }
+
+    if (editedName) {
+      names.add(
+        normaliseCapabilityIdentity(
+          editedName
+        )
+      );
+    }
+  }
+
+  let emergingCapabilitiesStaged =
+    0;
+
+  for (
+    const emerging of
+    reassessment
+      .emergingCapabilities
+  ) {
+    const emergingName =
+      emerging.name.trim();
+
+    const emergingEvidence =
+      emerging.evidence.trim();
+
+    if (
+      !emergingName ||
+      !emergingEvidence
+    ) {
+      continue;
+    }
+
+    const emergingCanonical =
+      await findCompetency(
+        emergingName
+      );
+
+    const emergingCanonicalId =
+      emergingCanonical
+        ? String(
+            emergingCanonical.id
+          )
+        : null;
+
+    const stagedName =
+      emergingCanonical
+        ? String(
+            emergingCanonical.name
+          )
+        : emergingName;
+
+    const normalisedOriginalName =
+      normaliseCapabilityIdentity(
+        emergingName
+      );
+
+    const normalisedStagedName =
+      normaliseCapabilityIdentity(
+        stagedName
+      );
+
+    if (
+      (
+        emergingCanonicalId &&
+        canonicalIds.has(
+          emergingCanonicalId
+        )
+      ) ||
+      names.has(
+        normalisedOriginalName
+      ) ||
+      names.has(
+        normalisedStagedName
+      )
+    ) {
+      continue;
+    }
+
+    await stageCapability({
+      roleAssessmentId,
+
+      competencyId:
+        emergingCanonicalId,
+
+      name:
+        stagedName,
+
+      sourceType:
+        "assessment",
+
+      sourceSection:
+        roleTitle,
+
+      evidence:
+        emergingEvidence,
+
+      confidence:
+        clamp(
+          Number(
+            emerging.confidence
+          )
+        ),
+
+      demonstrated:
+        true,
+
+      capabilityStatus:
+        "demonstrated",
+
+      assessmentStatus:
+        "assessed",
+    });
+
+    if (
+      emergingCanonicalId
+    ) {
+      canonicalIds.add(
+        emergingCanonicalId
+      );
+    }
+
+    names.add(
+      normalisedOriginalName
+    );
+
+    names.add(
+      normalisedStagedName
+    );
+
+    emergingCapabilitiesStaged++;
+  }
+
+  /*
+   * Success-gate metadata comes only AFTER
+   * the authoritative reassessment state
+   * has been persisted.
+   */
+  await recordSuccessGate({
+    assessmentId,
+    roleAssessmentId,
+
+    gateKey:
+      "capability_review_completed",
+
+    metadata: {
+      capabilityId,
+      reviewStatus:
+        "edited",
+      reassessmentOutcome:
+        outcome,
+      emergingCapabilitiesStaged,
+    },
+  });
+
+  /*
+   * Mirror the accepted/rejected review
+   * service behaviour.
+   *
+   * A demonstrated reassessment remains
+   * proposed, so it will keep this count
+   * above zero until the candidate makes
+   * the subsequent Accept/Reject decision.
+   */
+  const remainingReview =
+    await sql`
+      SELECT
+        COUNT(*)::int AS count
+      FROM career_role_capabilities
+      WHERE role_assessment_id =
+        ${roleAssessmentId}
+        AND demonstrated = TRUE
+        AND capability_status =
+          'demonstrated'
+        AND review_status =
+          'proposed'
+    `;
+
+  const remainingCount =
+    Number(
+      remainingReview
+        .rows[0]
+        ?.count ||
+        0
+    );
+
+  if (
+    remainingCount === 0
+  ) {
+    await recordSuccessGate({
+      assessmentId,
+      roleAssessmentId,
+
+      gateKey:
+        "all_demonstrated_capabilities_reviewed",
+    });
+  }
+}
+
 async function handleReviewCapability(
   body: any,
   userId: string
@@ -735,31 +1422,46 @@ async function handleReviewCapability(
       | "edited"
       | "rejected";
 
-  await reviewRoleCapability({
-    userId,
-    roleAssessmentId,
-    capabilityId,
-    reviewStatus,
-    editedCompetencyName:
-      body.competencyName ||
-      body.name,
-    editedEvidence:
-      body.evidence,
-  });
+  if (
+    reviewStatus ===
+    "edited"
+  ) {
+    await reassessEditedCapability({
+      userId,
+      roleAssessmentId,
+      capabilityId,
+
+      editedCompetencyName:
+        body.competencyName ||
+        body.name,
+
+      editedEvidence:
+        body.evidence,
+    });
+  } else {
+    /*
+     * Accepted/rejected retain the
+     * existing direct review-state path.
+     */
+    await reviewRoleCapability({
+      userId,
+      roleAssessmentId,
+      capabilityId,
+      reviewStatus,
+    });
+  }
 
   const role =
     await getRolePayload(
       roleAssessmentId
     );
 
-  return NextResponse.json(
-    {
-      success: true,
-      role,
-      successGates:
-        role.successGates,
-    }
-  );
+  return NextResponse.json({
+    success: true,
+    role,
+    successGates:
+      role.successGates,
+  });
 }
 
 /* ============================================================
