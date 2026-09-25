@@ -158,6 +158,12 @@ Rules:
 - Do not invent career experience.
 - Confidence must be between 0 and 1.
 
+Candidate-owned evidence rule:
+- Write evidence in first-person candidate voice (for example, "I diagnosed...", not "The candidate diagnosed...").
+- Do not introduce "the candidate", "they", "he" or "she" unless reproducing an attributable third-party source.
+- Improve clarity only; do not alter ownership, scope, certainty, strength or substantive meaning of the source evidence.
+- Never invent evidence.
+
 Role:
 ${JSON.stringify(
   {
