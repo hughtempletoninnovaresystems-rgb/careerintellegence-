@@ -234,10 +234,37 @@ export async function submitRoleForProfile({
     gateKey: "final_submission_check_passed",
   });
 
-  await promoteRoleToCandidateProfile({
+  const promotion = await promoteRoleToCandidateProfile({
     roleAssessmentId,
     userId,
   });
+
+  /*
+   * CI-DRWP-006:
+   *
+   * Promotion itself verifies that every eligible source capability ID belongs
+   * to a persisted/reconciled Candidate Profile identity.
+   *
+   * Do NOT compare eligibleCapabilityIds.length with
+   * representedProfileIdentities.length here. Multiple assessment evidence
+   * records may legitimately converge on one Candidate Profile capability.
+   *
+   * A non-empty eligible source set with no represented Profile identity is
+   * therefore the relevant defensive completion failure at this boundary.
+   */
+  if (
+    promotion.eligibleCapabilityIds.length > 0 &&
+    promotion.representedProfileIdentities.length === 0
+  ) {
+    throw new CareerIntelligenceError(
+      "Candidate capability promotion reconciliation is incomplete.",
+      {
+        status: 409,
+        code: "capability_promotion_incomplete",
+        expose: true,
+      },
+    );
+  }
 
   await recordSuccessGate({
     assessmentId,
