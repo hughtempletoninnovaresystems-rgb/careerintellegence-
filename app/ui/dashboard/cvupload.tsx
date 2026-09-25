@@ -2179,34 +2179,38 @@ export default function CVUpload() {
           }
         );
 
-      if (
-        data.role
-      ) {
-        updateRoleInState(
-          normaliseRole(
-            data.role,
-            journeySource
-          )
-        );
-      }
-
-      const gates =
-        extractSuccessGates(
-          data
-        );
-
-      if (
-        gates.length
-      ) {
-        setSuccessGates(
-          gates
-        );
-      }
-
+      /*
+       * Further review / clarification must be handled before
+       * any completed-state processing.
+       */
       if (
         data.requiresFurtherReview ||
         data.requiresFurtherClarification
       ) {
+        if (
+          data.role
+        ) {
+          updateRoleInState(
+            normaliseRole(
+              data.role,
+              journeySource
+            )
+          );
+        }
+
+        const gates =
+          extractSuccessGates(
+            data
+          );
+
+        if (
+          gates.length
+        ) {
+          setSuccessGates(
+            gates
+          );
+        }
+
         setMessage(
           data.message ||
             "Additional assessment work has been identified."
@@ -2216,114 +2220,165 @@ export default function CVUpload() {
       }
 
       if (
-        data.assessmentCompleted
+        data.success !== true ||
+        !data.role
       ) {
-        setViewMode(
-          "complete"
+        throw new Error(
+          "The role submission response was incomplete. Your current role has been retained; please try again."
         );
-
-        setMessage(
-          "Career assessment completed."
-        );
-
-        return;
       }
 
       if (
-        data.nextRole
+        data.completed ===
+        true
       ) {
-        const nextRole =
-          normaliseRole(
-            data.nextRole,
-            journeySource
-          );
+        if (
+          data.nextRole
+        ) {
+          const completedRole =
+            normaliseRole(
+              data.role,
+              journeySource
+            );
 
-        const nextIndex =
-          roles.findIndex(
-            (role) =>
-              role.id ===
-              nextRole.id
-          );
+          const nextRole =
+            normaliseRole(
+              data.nextRole,
+              journeySource
+            );
 
-        setRoles(
-          (previous) =>
-            previous.map(
+          const nextIndex =
+            roles.findIndex(
               (role) =>
                 role.id ===
                 nextRole.id
-                  ? nextRole
-                  : role
-            )
-        );
+            );
 
-        setRoleContextEditing(
-          true
-        );
+          setRoles(
+            (previous) =>
+              previous.map(
+                (role) => {
+                  if (
+                    role.id ===
+                    completedRole.id
+                  ) {
+                    return completedRole;
+                  }
 
-        setCurrentRoleIndex(
-          nextIndex >= 0
-            ? nextIndex
-            : Math.min(
-                currentRoleIndex +
-                  1,
-                roles.length -
-                  1
+                  if (
+                    role.id ===
+                    nextRole.id
+                  ) {
+                    return nextRole;
+                  }
+
+                  return role;
+                }
               )
-        );
+          );
 
-        if (
-          nextRole
-            .successGates
-            ?.length
-        ) {
-          setSuccessGates(
+          setRoleContextEditing(
+            true
+          );
+
+          setCurrentRoleIndex(
+            nextIndex >= 0
+              ? nextIndex
+              : Math.min(
+                  currentRoleIndex +
+                    1,
+                  roles.length -
+                    1
+                )
+          );
+
+          if (
             nextRole
               .successGates
+              ?.length
+          ) {
+            setSuccessGates(
+              nextRole
+                .successGates
+            );
+          } else {
+            const gates =
+              extractSuccessGates(
+                data
+              );
+
+            if (
+              gates.length
+            ) {
+              setSuccessGates(
+                gates
+              );
+            }
+          }
+
+          setAnswers({});
+
+          setMessage(
+            "Role completed. Moving to the next role."
           );
+
+          return;
         }
 
-        setAnswers({});
-
-        setMessage(
-          "Role completed. Moving to the next role."
-        );
-
-        return;
-      }
-
-      if (
-        currentRoleIndex +
-          1 <
-        roles.length
-      ) {
-        setRoleContextEditing(
+        if (
+          data.assessmentCompleted ===
           true
-        );
+        ) {
+          const completedRole =
+            normaliseRole(
+              data.role,
+              journeySource
+            );
 
-        setCurrentRoleIndex(
-          currentRoleIndex +
-            1
-        );
+          updateRoleInState(
+            completedRole
+          );
 
-        setAnswers({});
+          const gates =
+            extractSuccessGates(
+              data
+            );
 
-        setMessage(
-          "Role completed. Moving to the next role."
-        );
-      } else if (
-        data.lifecycleStatus ===
-        "completed"
-      ) {
-        setViewMode(
-          "complete"
+          if (
+            gates.length
+          ) {
+            setSuccessGates(
+              gates
+            );
+          }
+
+          setViewMode(
+            "complete"
+          );
+
+          setMessage(
+            data.message ||
+              "Career assessment completed."
+          );
+
+          return;
+        }
+
+        throw new Error(
+          "The role was reported as completed, but the server did not provide a next role or confirm assessment completion. Your current role has been retained; please try again."
         );
       }
+
+      throw new Error(
+        data.message ||
+          "The role submission did not return a valid completion state. Your current role has been retained; please try again."
+      );
     } catch (error) {
       setMessage(
         error instanceof
           Error
           ? error.message
-          : "Unable to submit role."
+          : "Unable to submit role. Your current role has been retained; please try again."
       );
     } finally {
       setLoading(false);
