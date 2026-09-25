@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import type { CareerQueryClient } from "../data/query-client";
 import { CareerIntelligenceError } from "../errors";
 import {
   canTransitionRoleLifecycle,
@@ -8,11 +9,15 @@ import {
 export async function transitionRoleLifecycle({
   roleAssessmentId,
   to,
+  client,
 }: {
   roleAssessmentId: string;
   to: RoleLifecycleStatus;
+  client?: CareerQueryClient;
 }) {
-  const currentResult = await sql`
+  const query = client?.sql || sql;
+
+  const currentResult = await query`
     SELECT lifecycle_status
     FROM career_role_assessments
     WHERE id=${roleAssessmentId}
@@ -42,7 +47,7 @@ export async function transitionRoleLifecycle({
     );
   }
 
-  const updateResult = await sql`
+  const updateResult = await query`
     UPDATE career_role_assessments
     SET
       lifecycle_status=${to},

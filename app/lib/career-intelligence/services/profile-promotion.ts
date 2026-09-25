@@ -1,7 +1,10 @@
 import { sql } from "@vercel/postgres";
+import type { CareerQueryClient } from "../data/query-client";
 import { proposeRepositoryKnowledge } from "./repository-enrichment";
-import { loadRoleAssessmentSnapshot } from "./role-snapshot";
-
+import {
+  loadRoleAssessmentSnapshot,
+  type RoleAssessmentSnapshot,
+} from "./role-snapshot";
 /**
  * Promotes user-approved role knowledge into the candidate profile.
  *
@@ -12,11 +15,9 @@ import { loadRoleAssessmentSnapshot } from "./role-snapshot";
  * - newly discovered global role/capability intelligence is created only as
  *   proposed repository knowledge through proposeRepositoryKnowledge().
  *
- * This function is repeatable for a role assessment: the profile role is
- * upserted by source_role_assessment_id and its capability/gap snapshot is
- * rebuilt. It is not yet a database transaction; that remains a Gate 5 work
- * item because partial write recovery must be designed against the deployed
- * PostgreSQL/runtime transaction facilities.
+ * The function remains repeatable for a role assessment. When supplied with
+ * a connected client by the role-completion service, all Profile and
+ * Repository writes participate in the caller's transaction.
  */
 
 function isPromotionEligible(capability: any) {
@@ -184,13 +185,26 @@ function reconcileEligibleCapabilities(
 }
 
 export async function promoteRoleToCandidateProfile({
-  roleAssessmentId,
-  userId,
-}: {
-  roleAssessmentId: string;
-  userId: string;
-}): Promise<PromotionResult> {
-  const role = await loadRoleAssessmentSnapshot(roleAssessmentId);
+    roleAssessmentId,
+    userId,
+    client,
+    snapshot,
+  }: {
+    roleAssessmentId: string;
+    userId: string;
+    client?: CareerQueryClient;
+    snapshot?: RoleAssessmentSnapshot;
+  }): Promise<PromotionResult> {
+  const query = client?.sql || sql;
+
+  /*
+   * When called inside the atomic completion unit, the caller supplies the
+   * authoritative pre-transaction snapshot so promotion performs no
+   * pool/global queries after BEGIN.
+   */
+  const role =
+    snapshot || (await loadRoleAssessmentSnapshot(roleAssessmentId));
+
   const originalCanonicalRoleId = role.canonicalRoleId;
 
   /*
@@ -244,11 +258,13 @@ export async function promoteRoleToCandidateProfile({
     },
     capabilities: reconciledCapabilities.map((capability) => ({
       name: capability.name,
-      approvedCanonicalCompetencyId: capability.canonicalCompetencyId,
+      approvedCanonicalCompetencyId:
+        capability.canonicalCompetencyId,
     })),
+    client,
   });
 
-  const profileResult = await sql`
+  const profileResult = await query`
     INSERT INTO candidate_profile_roles (
       user_id,
       source_role_assessment_id,
@@ -307,12 +323,12 @@ export async function promoteRoleToCandidateProfile({
 
   const profileRoleId = String(profileResult.rows[0].id);
 
-  await sql`
+  await query`
     DELETE FROM candidate_profile_role_capabilities
     WHERE candidate_profile_role_id=${profileRoleId}
   `;
 
-  await sql`
+  await query`
     DELETE FROM candidate_profile_role_gaps
     WHERE candidate_profile_role_id=${profileRoleId}
   `;
@@ -324,7 +340,7 @@ export async function promoteRoleToCandidateProfile({
    * capability rows.
    */
   for (const capability of reconciledCapabilities) {
-    await sql`
+    await query`
       INSERT INTO candidate_profile_role_capabilities (
         candidate_profile_role_id,
         competency_id,
@@ -366,7 +382,7 @@ export async function promoteRoleToCandidateProfile({
      * approved repository knowledge at assessment time.
      */
     if (originalCanonicalRoleId && capability.canonicalCompetencyId) {
-      await sql`
+      await query`
         INSERT INTO candidate_knowledge (
           user_id,
           role_id,
@@ -404,7 +420,7 @@ export async function promoteRoleToCandidateProfile({
     const name = finalCapabilityName(capability);
     const evidence = finalCapabilityEvidence(capability);
 
-    await sql`
+    await query`
       INSERT INTO candidate_profile_role_gaps (
         candidate_profile_role_id,
         competency_name,

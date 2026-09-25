@@ -2,7 +2,10 @@ import { sql } from "@vercel/postgres";
 import { findCompetency, verifyRoleOwnership } from "../data/repository";
 import { addClarificationRound, stageCapability } from "../data/staging";
 import { CareerIntelligenceError } from "../errors";
-import { recordSuccessGate } from "../success-gates";
+import {
+  recordSuccessGate,
+  recordSuccessGateAtomic,
+} from "../success-gates";
 import { runFinalRoleReview } from "./final-review";
 import { promoteRoleToCandidateProfile } from "./profile-promotion";
 import { transitionRoleLifecycle } from "./role-lifecycle";
@@ -120,7 +123,10 @@ async function completeAssessmentIfReady(assessmentId: string) {
   if (completed) {
     await sql`
       UPDATE career_assessments
-      SET status='completed', completed_at=COALESCE(completed_at, NOW()), updated_at=NOW()
+      SET
+        status='completed',
+        completed_at=COALESCE(completed_at, NOW()),
+        updated_at=NOW()
       WHERE id=${assessmentId}
         AND status <> 'completed'
     `;
@@ -149,15 +155,28 @@ export async function submitRoleForProfile({
   const assessmentId = await verifyRoleOwnership(roleAssessmentId, userId);
   const initial = await loadRoleAssessmentSnapshot(roleAssessmentId);
 
-  // Repeat submission after a successful completion is idempotent and avoids
-  // an additional AI/provider call or duplicate profile/repository work.
+  /*
+   * Repeat submission after successful role completion is recoverable as well
+   * as idempotent.
+   *
+   * Promotion/repository work must not run again, but downstream activation or
+   * assessment completion may previously have failed after the atomic role
+   * completion transaction committed. Re-running those operations here allows
+   * the workflow to recover safely.
+   */
   if (initial.lifecycleStatus === "completed") {
+    const nextRoleAssessmentId = await activateNextRole({
+      assessmentId,
+      roleAssessmentId,
+    });
+
     return {
       assessmentId,
       roleAssessmentId,
-      nextRoleAssessmentId: null,
+      nextRoleAssessmentId,
       completed: true,
-      assessmentCompleted: await completeAssessmentIfReady(assessmentId),
+      assessmentCompleted:
+        await completeAssessmentIfReady(assessmentId),
       requiresFurtherReview: false,
       idempotentReplay: true,
     };
@@ -207,7 +226,10 @@ export async function submitRoleForProfile({
       });
     }
 
-    await addClarificationRound(roleAssessmentId, finalCheck.clarifications);
+    await addClarificationRound(
+      roleAssessmentId,
+      finalCheck.clarifications,
+    );
 
     if (initial.lifecycleStatus !== "in_progress") {
       await transitionRoleLifecycle({
@@ -234,61 +256,129 @@ export async function submitRoleForProfile({
     gateKey: "final_submission_check_passed",
   });
 
-  const promotion = await promoteRoleToCandidateProfile({
-    roleAssessmentId,
-    userId,
-  });
-
   /*
-   * CI-DRWP-006:
+   * CI-DRWP-007 — Atomic / Recoverable Completion Unit
    *
-   * Promotion itself verifies that every eligible source capability ID belongs
-   * to a persisted/reconciled Candidate Profile identity.
+   * The authoritative assessment snapshot has already been loaded above.
+   * From BEGIN until COMMIT/ROLLBACK, every persistence operation in the
+   * promotion/completion unit must use this connected client.
    *
-   * Do NOT compare eligibleCapabilityIds.length with
-   * representedProfileIdentities.length here. Multiple assessment evidence
-   * records may legitimately converge on one Candidate Profile capability.
+   * This unit covers:
+   * - Repository acquisition
+   * - Candidate Profile persistence
+   * - Candidate capability reconciliation
+   * - role_promoted success state
+   * - role lifecycle completion
+   * - role_completed success state
    *
-   * A non-empty eligible source set with no represented Profile identity is
-   * therefore the relevant defensive completion failure at this boundary.
+   * A failure anywhere in this unit therefore cannot leave Profile/Repository
+   * promotion committed while the role remains incomplete.
    */
-  if (
-    promotion.eligibleCapabilityIds.length > 0 &&
-    promotion.representedProfileIdentities.length === 0
-  ) {
-    throw new CareerIntelligenceError(
-      "Candidate capability promotion reconciliation is incomplete.",
-      {
-        status: 409,
-        code: "capability_promotion_incomplete",
-        expose: true,
-      },
-    );
+  const client = await sql.connect();
+
+  try {
+    await client.sql`BEGIN`;
+
+    const promotion = await promoteRoleToCandidateProfile({
+      roleAssessmentId,
+      userId,
+      client,
+      snapshot: initial,
+    });
+
+    /*
+     * CI-DRWP-006:
+     *
+     * Promotion itself verifies that every eligible source capability ID
+     * belongs to a persisted/reconciled Candidate Profile identity.
+     *
+     * Do NOT compare eligibleCapabilityIds.length with
+     * representedProfileIdentities.length here. Multiple assessment evidence
+     * records may legitimately converge on one Candidate Profile capability.
+     *
+     * A non-empty eligible source set with no represented Profile identity is
+     * therefore the relevant defensive completion failure at this boundary.
+     */
+    if (
+      promotion.eligibleCapabilityIds.length > 0 &&
+      promotion.representedProfileIdentities.length === 0
+    ) {
+      throw new CareerIntelligenceError(
+        "Candidate capability promotion reconciliation is incomplete.",
+        {
+          status: 409,
+          code: "capability_promotion_incomplete",
+          expose: true,
+        },
+      );
+    }
+
+    /*
+     * Do not record role_promoted before the corresponding business-state
+     * writes have succeeded.
+     *
+     * The gate itself remains uncommitted until the entire transaction commits.
+     */
+    await recordSuccessGateAtomic(client, {
+      assessmentId,
+      roleAssessmentId,
+      gateKey: "role_promoted",
+    });
+
+    await transitionRoleLifecycle({
+      roleAssessmentId,
+      to: "completed",
+      client,
+    });
+
+    /*
+     * role_completed is only written after the lifecycle business-state write
+     * has succeeded. A gate-write failure propagates and rolls everything back.
+     */
+    await recordSuccessGateAtomic(client, {
+      assessmentId,
+      roleAssessmentId,
+      gateKey: "role_completed",
+    });
+
+    await client.sql`COMMIT`;
+  } catch (error) {
+    try {
+      await client.sql`ROLLBACK`;
+    } catch (rollbackError) {
+      /*
+       * Preserve the original failure. The rollback failure is diagnostic and
+       * must not replace the error that caused completion to abort.
+       */
+      console.error("Unable to roll back role completion transaction", {
+        roleAssessmentId,
+        errorName:
+          rollbackError instanceof Error
+            ? rollbackError.name
+            : "unknown",
+      });
+    }
+
+    throw error;
+  } finally {
+    client.release();
   }
 
-  await recordSuccessGate({
-    assessmentId,
-    roleAssessmentId,
-    gateKey: "role_promoted",
-  });
-
-  await transitionRoleLifecycle({
-    roleAssessmentId,
-    to: "completed",
-  });
-
-  await recordSuccessGate({
-    assessmentId,
-    roleAssessmentId,
-    gateKey: "role_completed",
-  });
-
+  /*
+   * These operations occur only after the authoritative role completion unit
+   * has committed.
+   *
+   * If either fails, retry enters the completed-role branch above and safely
+   * retries downstream activation/completion without repeating Profile or
+   * Repository promotion.
+   */
   const nextRoleAssessmentId = await activateNextRole({
     assessmentId,
     roleAssessmentId,
   });
 
-  const assessmentCompleted = await completeAssessmentIfReady(assessmentId);
+  const assessmentCompleted =
+    await completeAssessmentIfReady(assessmentId);
 
   return {
     assessmentId,

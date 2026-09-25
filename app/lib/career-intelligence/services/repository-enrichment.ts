@@ -1,5 +1,5 @@
 import { sql } from "@vercel/postgres";
-import { findCanonicalRole, findCompetency } from "../data/repository";
+import type { CareerQueryClient } from "../data/query-client";
 
 export type RepositoryProposalSource = {
   assessmentId: string;
@@ -19,8 +19,46 @@ type RepositoryObject = {
   usableForProposal: boolean;
 };
 
-async function findRoleAnyStatus(title: string) {
-  const result = await sql`
+async function findApprovedRole(
+  query: CareerQueryClient["sql"],
+  title: string,
+) {
+  const result = await query`
+    SELECT id, lifecycle_status
+    FROM roles
+    WHERE lifecycle_status='approved'
+      AND (
+        LOWER(name)=LOWER(${title})
+        OR LOWER(job_title)=LOWER(${title})
+      )
+    ORDER BY created_at
+    LIMIT 1
+  `;
+
+  return result.rows[0] || null;
+}
+
+async function findApprovedCompetency(
+  query: CareerQueryClient["sql"],
+  name: string,
+) {
+  const result = await query`
+    SELECT id, lifecycle_status
+    FROM competencies
+    WHERE lifecycle_status='approved'
+      AND LOWER(name)=LOWER(${name})
+    ORDER BY created_at
+    LIMIT 1
+  `;
+
+  return result.rows[0] || null;
+}
+
+async function findRoleAnyStatus(
+  query: CareerQueryClient["sql"],
+  title: string,
+) {
+  const result = await query`
     SELECT id, lifecycle_status
     FROM roles
     WHERE LOWER(name)=LOWER(${title})
@@ -38,8 +76,11 @@ async function findRoleAnyStatus(title: string) {
   return result.rows[0] || null;
 }
 
-async function findCompetencyAnyStatus(name: string) {
-  const result = await sql`
+async function findCompetencyAnyStatus(
+  query: CareerQueryClient["sql"],
+  name: string,
+) {
+  const result = await query`
     SELECT id, lifecycle_status
     FROM competencies
     WHERE LOWER(name)=LOWER(${name})
@@ -70,15 +111,25 @@ function asRepositoryObject(row: any, created: boolean): RepositoryObject {
 }
 
 async function ensureRepositoryRole({
+  query,
   title,
   description,
   source,
 }: {
+  query: CareerQueryClient["sql"];
   title: string;
   description?: string | null;
   source: RepositoryProposalSource;
 }): Promise<RepositoryObject> {
-  const approved = await findCanonicalRole(title);
+  /*
+   * CI-DRWP-007:
+   *
+   * Perform the approved canonical lookup through the same query executor as
+   * the remainder of repository acquisition. Calling findCanonicalRole() here
+   * would escape the connected transaction because that repository helper uses
+   * global sql.
+   */
+  const approved = await findApprovedRole(query, title);
 
   if (approved) {
     return {
@@ -89,13 +140,13 @@ async function ensureRepositoryRole({
     };
   }
 
-  const existing = await findRoleAnyStatus(title);
+  const existing = await findRoleAnyStatus(query, title);
 
   if (existing) {
     return asRepositoryObject(existing, false);
   }
 
-  const result = await sql`
+  const result = await query`
     INSERT INTO roles (
       name,
       job_title,
@@ -129,7 +180,7 @@ async function ensureRepositoryRole({
 
   // Covers a concurrent insert or an exact-name conflict without rewriting
   // the provenance of the existing repository record.
-  const concurrent = await findRoleAnyStatus(title);
+  const concurrent = await findRoleAnyStatus(query, title);
 
   if (!concurrent) {
     throw new Error("Unable to establish repository role proposal.");
@@ -139,13 +190,21 @@ async function ensureRepositoryRole({
 }
 
 async function ensureRepositoryCompetency({
+  query,
   name,
   source,
 }: {
+  query: CareerQueryClient["sql"];
   name: string;
   source: RepositoryProposalSource;
 }): Promise<RepositoryObject> {
-  const approved = await findCompetency(name);
+  /*
+   * CI-DRWP-007:
+   *
+   * As with roles, the approved competency lookup must use the connected
+   * transaction client rather than findCompetency()/global sql.
+   */
+  const approved = await findApprovedCompetency(query, name);
 
   if (approved) {
     return {
@@ -156,13 +215,13 @@ async function ensureRepositoryCompetency({
     };
   }
 
-  const existing = await findCompetencyAnyStatus(name);
+  const existing = await findCompetencyAnyStatus(query, name);
 
   if (existing) {
     return asRepositoryObject(existing, false);
   }
 
-  const result = await sql`
+  const result = await query`
     INSERT INTO competencies (
       name,
       lifecycle_status,
@@ -188,7 +247,7 @@ async function ensureRepositoryCompetency({
     return asRepositoryObject(result.rows[0], true);
   }
 
-  const concurrent = await findCompetencyAnyStatus(name);
+  const concurrent = await findCompetencyAnyStatus(query, name);
 
   if (!concurrent) {
     throw new Error("Unable to establish repository capability proposal.");
@@ -198,15 +257,17 @@ async function ensureRepositoryCompetency({
 }
 
 async function ensureRoleCompetencyRelationship({
+  query,
   roleId,
   competencyId,
   source,
 }: {
+  query: CareerQueryClient["sql"];
   roleId: string;
   competencyId: string;
   source: RepositoryProposalSource;
 }): Promise<RepositoryObject> {
-  const existing = await sql`
+  const existing = await query`
     SELECT id, lifecycle_status
     FROM role_competencies
     WHERE role_id=${roleId}
@@ -218,7 +279,7 @@ async function ensureRoleCompetencyRelationship({
     return asRepositoryObject(existing.rows[0], false);
   }
 
-  const result = await sql`
+  const result = await query`
     INSERT INTO role_competencies (
       role_id,
       competency_id,
@@ -246,7 +307,7 @@ async function ensureRoleCompetencyRelationship({
     return asRepositoryObject(result.rows[0], true);
   }
 
-  const concurrent = await sql`
+  const concurrent = await query`
     SELECT id, lifecycle_status
     FROM role_competencies
     WHERE role_id=${roleId}
@@ -271,19 +332,30 @@ async function ensureRoleCompetencyRelationship({
  * Existing rejected CKM objects/relationships are never reactivated here.
  * They are reported as governance conflicts so that candidate profile
  * persistence remains independent from global repository governance.
+ *
+ * CI-DRWP-007:
+ * When a connected client is supplied, every repository read/write performed
+ * by this service uses that client and therefore participates in the caller's
+ * transaction. Existing callers that do not supply a client retain the
+ * previous global-sql behaviour.
  */
 export async function proposeRepositoryKnowledge({
   roleTitle,
   roleDescription,
   source,
   capabilities,
+  client,
 }: {
   roleTitle: string;
   roleDescription?: string | null;
   source: RepositoryProposalSource;
   capabilities: RepositoryCapabilityInput[];
+  client?: CareerQueryClient;
 }) {
+  const query = client?.sql || sql;
+
   const repositoryRole = await ensureRepositoryRole({
+    query,
     title: roleTitle,
     description: roleDescription,
     source,
@@ -307,6 +379,7 @@ export async function proposeRepositoryKnowledge({
 
   for (const capability of capabilities) {
     const cleanName = capability.name.trim();
+
     if (!cleanName) {
       continue;
     }
@@ -319,6 +392,7 @@ export async function proposeRepositoryKnowledge({
           usableForProposal: true,
         }
       : await ensureRepositoryCompetency({
+          query,
           name: cleanName,
           source,
         });
@@ -333,6 +407,7 @@ export async function proposeRepositoryKnowledge({
     }
 
     const relationship = await ensureRoleCompetencyRelationship({
+      query,
       roleId: repositoryRole.id,
       competencyId: competency.id,
       source,
