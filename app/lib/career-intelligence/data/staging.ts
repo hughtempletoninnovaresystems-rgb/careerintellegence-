@@ -21,7 +21,7 @@ export async function stageCapability({
   sourceSection?: string | null;
   evidence?: string;
   confidence?: number;
-  demonstrated: boolean;
+  demonstrated: boolean | null;
   capabilityStatus: CapabilityStatus;
   assessmentStatus: AssessmentStatus;
 }) {

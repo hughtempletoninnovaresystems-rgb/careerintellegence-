@@ -21,6 +21,19 @@ export const gapListSchema = z.object({
   gaps: z.array(gapSchema).max(50).default([]),
 });
 
+export const cvCapabilitySignalAssessmentSchema = z.object({
+  results: z.array(
+    z.object({
+      competency: capabilityName,
+      status: z.enum(["demonstrated", "clarify"]),
+      confidence: z.coerce.number().min(0).max(1),
+      evidence: evidenceText.default(""),
+      reason: reasonText.default(""),
+      followUpQuestion: z.string().max(5_000).optional().default(""),
+    }),
+  ).max(100).default([]),
+});
+
 export const evaluationSchema = z.object({
   questionId: z.coerce.string().max(100),
   competency: z.coerce.string().trim().min(1).max(500),

@@ -5,6 +5,7 @@ export type ReviewStatus =
   | "rejected";
 
 export type CapabilityStatus =
+  | "signal"
   | "demonstrated"
   | "gap";
 

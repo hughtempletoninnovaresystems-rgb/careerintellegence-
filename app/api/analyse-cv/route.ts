@@ -30,7 +30,7 @@ import { generateValidatedJson } from "@/app/lib/career-intelligence/ai/provider
 
 
 
-import { cvExtractionSchema, gapListSchema } from "@/app/lib/career-intelligence/ai/schemas";
+import { cvExtractionSchema, gapListSchema, cvCapabilitySignalAssessmentSchema } from "@/app/lib/career-intelligence/ai/schemas";
 
 
 
@@ -2161,7 +2161,56 @@ ${cvText}
 }
 
 
+async function assessCVCapabilitySignals(role: ExtractedRole) {
+  const prompt = `
+You are GIAS assessing capability signals extracted from a CV for one historical role.
 
+A repository match or capability label is NOT evidence.
+Assess only the candidate-specific CV evidence supplied for this role.
+
+${CAPABILITY_IDENTITY_RULES}
+${EVIDENCE_ASSESSMENT_RULES}
+${CANDIDATE_OWNED_EVIDENCE_RULES}
+
+Return JSON only:
+{
+  "results": [
+    {
+      "competency": "",
+      "status": "demonstrated | clarify",
+      "confidence": 0.0,
+      "evidence": "",
+      "reason": "",
+      "followUpQuestion": ""
+    }
+  ]
+}
+
+Rules:
+- Return one result for every supplied capability signal.
+- demonstrated only where the supplied CV evidence is sufficiently specific to support the capability for this candidate in this role.
+- clarify where the capability is plausible but the supplied evidence is insufficient to demonstrate it.
+- Job title, generic responsibility, repository correspondence, exposure, or an unsupported capability label is not sufficient evidence on its own.
+- For clarify, ask one focused evidence-bearing question seeking concrete context, the candidate's personal action and, where relevant, outcome.
+- Do not infer absence of competence from insufficient evidence.
+- Do not invent experience.
+
+ROLE:
+${JSON.stringify({
+  organisationName: role.organisationName,
+  roleTitle: role.roleTitle,
+  roleDescription: role.roleDescription,
+  capabilities: role.capabilities,
+})}
+`;
+
+  const parsed = await generateValidatedJson({
+    prompt,
+    schema: cvCapabilitySignalAssessmentSchema,
+  });
+
+  return parsed.results;
+}
 
 
 
@@ -4110,219 +4159,75 @@ async function handleCVUpload(
 
 
 
-    for (
-
-
-
-      const capability of
-
-
-
-      extractedRole.capabilities
-
-
-
-    ) {
-
-
-
-      const mapped =
-
-
-
-        await mapCapability(
-
-
-
-          capability
-
-
-
-        );
-
-
-
-
-
-
-
-      await stageCapability(
-
-
-
-        {
-
-
-
-          roleAssessmentId,
-
-
-
-
-
-
-
-          competencyId:
-
-
-
-            mapped.competencyId,
-
-
-
-
-
-
-
-          name:
-
-
-
-            mapped.name,
-
-
-
-
-
-
-
-          sourceType:
-
-
-
-            "cv",
-
-
-
-
-
-
-
-          sourceSection:
-
-
-
-            extractedRole.roleTitle,
-
-
-
-
-
-
-
-          evidence:
-
-
-
-            capability.evidence,
-
-
-
-
-
-
-
-          confidence:
-
-
-
-            capability.confidence,
-
-
-
-
-
-
-
-          demonstrated:
-
-
-
-            true,
-
-
-
-
-
-
-
-          capabilityStatus:
-
-
-
-            "demonstrated",
-
-
-
-
-
-
-
-          assessmentStatus:
-
-
-
-            "assessed",
-
-
-
-        }
-
-
-
-      );
-
-
-
-    }
-
-
-
-
-
-
-
-    const gaps =
-
-
-
-      canonicalRole
-
-
-
-        ? await generateQuestionsForExistingRole(
-
-
-
-            extractedRole,
-
-
-
-            String(
-
-
-
-              canonicalRole.id
-
-
-
-            )
-
-
-
-          )
-
-
-
-        : await generateQuestionsForNewRole(
-
-
-
-            extractedRole
-
-
-
-          );
+    const signalAssessments =
+    await assessCVCapabilitySignals(extractedRole);
+
+    const evidenceQuestions: Gap[] = [];
+
+    for (const capability of extractedRole.capabilities) {
+    const mapped = await mapCapability(capability);
+
+    const assessment = signalAssessments.find((item) =>
+        nameMatches(String(item.competency || ""), capability.name),
+    );
+
+    const sufficient =
+        String(assessment?.status || "clarify") === "demonstrated";
+
+    const assessedEvidence =
+        String(assessment?.evidence || capability.evidence || "").trim();
+
+    await stageCapability({
+        roleAssessmentId,
+        competencyId: mapped.competencyId,
+        name: mapped.name,
+        sourceType: "cv",
+        sourceSection: extractedRole.roleTitle,
+        evidence: assessedEvidence,
+        confidence: assessment
+        ? assessment.confidence
+        : capability.confidence,
+        demonstrated: sufficient ? true : null,
+        capabilityStatus: sufficient ? "demonstrated" : "signal",
+        assessmentStatus: sufficient
+        ? "assessed"
+        : "needs_clarification",
+    });
+
+    if (!sufficient) {
+        evidenceQuestions.push({
+        competency: mapped.name,
+        reason:
+            String(assessment?.reason || "").trim() ||
+            assessedEvidence ||
+            "The CV identifies this capability signal but does not provide sufficient supporting evidence.",
+        question:
+            String(assessment?.followUpQuestion || "").trim() ||
+            `Please provide a specific example of how you personally demonstrated ${mapped.name} in this role, including what you did and the outcome.`,
+        });
+    }
+    }
+
+    const repositoryQuestions = canonicalRole
+    ? await generateQuestionsForExistingRole(
+        extractedRole,
+        String(canonicalRole.id),
+        )
+    : await generateQuestionsForNewRole(extractedRole);
+
+    const gaps = [
+    ...evidenceQuestions,
+    ...repositoryQuestions,
+    ].filter(
+    (gap, index, all) =>
+        index ===
+        all.findIndex(
+        (candidate) =>
+            nameMatches(candidate.competency, gap.competency) &&
+            candidate.question.trim().toLowerCase() ===
+            gap.question.trim().toLowerCase(),
+        ),
+    );
 
 
 
