@@ -27,3 +27,12 @@ EVIDENCE RULES:
 - Historical evidence must not be overwritten by evidence from a later role.
 - Where a plausible signal exists but evidence is insufficient, request clarification rather than inventing evidence.
 `;
+
+export const CANDIDATE_OWNED_EVIDENCE_RULES = `
+CANDIDATE-OWNED EVIDENCE RULES:
+
+- Where evidence is presented to the candidate or persisted as candidate-owned Career/Knowledge Profile evidence, write it in first-person candidate voice.
+- Do not introduce "the candidate", "they", "he" or "she" unless reproducing an attributable third-party source.
+- Improve clarity and structure only; do not alter ownership, scope, certainty, strength or substantive meaning.
+- Never invent evidence.
+`;

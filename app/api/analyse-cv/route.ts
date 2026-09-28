@@ -86,7 +86,7 @@ import type { DatePrecision, ExtractedCapability, Gap } from "@/app/lib/career-i
 
 
 
-import { CAPABILITY_IDENTITY_RULES, EVIDENCE_ASSESSMENT_RULES } from "@/app/lib/career-intelligence/domain/intelligence-contract";
+import { CAPABILITY_IDENTITY_RULES, EVIDENCE_ASSESSMENT_RULES, CANDIDATE_OWNED_EVIDENCE_RULES } from "@/app/lib/career-intelligence/domain/intelligence-contract";
 
 
 
@@ -1338,7 +1338,7 @@ ${EVIDENCE_ASSESSMENT_RULES}
 
 
 
-
+${CANDIDATE_OWNED_EVIDENCE_RULES}
 
 
 

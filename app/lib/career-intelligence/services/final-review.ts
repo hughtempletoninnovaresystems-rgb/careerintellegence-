@@ -3,6 +3,7 @@ import { finalSubmissionCheckSchema } from "../ai/schemas";
 import {
   CAPABILITY_IDENTITY_RULES,
   EVIDENCE_ASSESSMENT_RULES,
+  CANDIDATE_OWNED_EVIDENCE_RULES,
 } from "../domain/intelligence-contract";
 import type { ExtractedCapability, Gap } from "../types";
 import type { RoleAssessmentSnapshot } from "./role-snapshot";
@@ -23,6 +24,7 @@ Perform a final consistency check on this career role before it is promoted to t
 
 ${CAPABILITY_IDENTITY_RULES}
 ${EVIDENCE_ASSESSMENT_RULES}
+${CANDIDATE_OWNED_EVIDENCE_RULES}
 
 Return JSON only:
 
