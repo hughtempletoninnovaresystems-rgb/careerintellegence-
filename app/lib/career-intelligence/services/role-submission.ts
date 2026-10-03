@@ -67,6 +67,7 @@ async function activateNextRole({
 
   const currentSequence = Number(current.rows[0]?.sequence_no || 0);
 
+  
   const next = await sql`
     SELECT id, lifecycle_status
     FROM career_role_assessments
