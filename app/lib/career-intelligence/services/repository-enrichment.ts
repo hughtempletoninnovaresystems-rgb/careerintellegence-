@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import type { CareerQueryClient } from "../data/query-client";
+import { getCareerSql } from "../db/career-sql";
 
 export type RepositoryProposalSource = {
   assessmentId: string;
@@ -352,7 +353,7 @@ export async function proposeRepositoryKnowledge({
   capabilities: RepositoryCapabilityInput[];
   client?: CareerQueryClient;
 }) {
-  const query = client?.sql || sql;
+  const query = getCareerSql(client);
 
   const repositoryRole = await ensureRepositoryRole({
     query,

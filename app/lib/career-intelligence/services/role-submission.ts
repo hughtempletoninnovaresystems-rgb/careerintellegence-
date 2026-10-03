@@ -356,6 +356,10 @@ export async function submitRoleForProfile({
           rollbackError instanceof Error
             ? rollbackError.name
             : "unknown",
+        errorMessage:
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError),
       });
     }
 

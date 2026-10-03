@@ -8,6 +8,7 @@ export function errorResponse(error: unknown, correlationId: string) {
       code: error.code,
       status: error.status,
       errorName: error.name,
+      errorMessage: error.message,
     });
 
     return NextResponse.json(
@@ -25,6 +26,10 @@ export function errorResponse(error: unknown, correlationId: string) {
   console.error("Career Intelligence request failed", {
     correlationId,
     errorName: error instanceof Error ? error.name : "unknown",
+    errorMessage:
+      error instanceof Error
+        ? error.message
+        : String(error),
   });
 
   return NextResponse.json(

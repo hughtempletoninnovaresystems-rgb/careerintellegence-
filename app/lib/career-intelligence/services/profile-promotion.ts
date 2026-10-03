@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import type { CareerQueryClient } from "../data/query-client";
+import { getCareerSql } from "../db/career-sql";
 import { proposeRepositoryKnowledge } from "./repository-enrichment";
 import {
   loadRoleAssessmentSnapshot,
@@ -195,7 +196,7 @@ export async function promoteRoleToCandidateProfile({
     client?: CareerQueryClient;
     snapshot?: RoleAssessmentSnapshot;
   }): Promise<PromotionResult> {
-  const query = client?.sql || sql;
+  const query = getCareerSql(client);
 
   /*
    * When called inside the atomic completion unit, the caller supplies the

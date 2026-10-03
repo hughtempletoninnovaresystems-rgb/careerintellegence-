@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import type { CareerQueryClient } from "../data/query-client";
+import { getCareerSql } from "../db/career-sql";
 import { CareerIntelligenceError } from "../errors";
 import {
   canTransitionRoleLifecycle,
@@ -15,7 +16,7 @@ export async function transitionRoleLifecycle({
   to: RoleLifecycleStatus;
   client?: CareerQueryClient;
 }) {
-  const query = client?.sql || sql;
+  const query = getCareerSql(client);
 
   const currentResult = await query`
     SELECT lifecycle_status
