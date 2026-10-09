@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import { getCareerSql } from "../db/career-sql";
 import { findCompetency, verifyRoleOwnership } from "../data/repository";
 import { addClarificationRound, stageCapability } from "../data/staging";
 import { CareerIntelligenceError } from "../errors";
@@ -44,7 +45,18 @@ async function countUnreviewedDemonstratedCapabilities(roleAssessmentId: string)
         assessment_status <> 'assessed'
         OR assessment_status IS NULL
         OR review_status IS NULL
-        OR review_status NOT IN ('accepted', 'rejected')
+        OR review_status NOT IN ('accepted', 'edited', 'rejected')
+        OR reviewed_revision_no IS DISTINCT FROM revision_no
+        OR (
+          review_status IN ('accepted', 'edited')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM career_capability_evidence_links cel
+            WHERE cel.role_capability_id=career_role_capabilities.id
+              AND cel.is_current=TRUE
+              AND cel.relationship_type='supporting'
+          )
+        )
       )
   `;
 
@@ -221,6 +233,7 @@ export async function submitRoleForProfile({
         sourceType: "final_check",
         evidence: item.evidence,
         confidence: item.confidence,
+        evidenceRelationshipType: "context",
         demonstrated: true,
         capabilityStatus: "demonstrated",
         assessmentStatus: "assessed",
@@ -279,12 +292,72 @@ export async function submitRoleForProfile({
 
   try {
     await client.sql`BEGIN`;
+    const query = getCareerSql(client);
+
+    // Lock the role and all mutable assessment children before checking the
+    // snapshot. Writers that honour these rows cannot change review/evidence
+    // state between the check and commit.
+    const lockedRole = await query`
+      SELECT id
+      FROM career_role_assessments
+      WHERE id=${roleAssessmentId}
+      FOR UPDATE
+    `;
+    if (!lockedRole.rows.length) {
+      throw new CareerIntelligenceError("Role assessment not found.", {
+        status: 404,
+        code: "role_assessment_not_found",
+        expose: true,
+      });
+    }
+
+    await query`
+      SELECT id
+      FROM career_role_capabilities
+      WHERE role_assessment_id=${roleAssessmentId}
+      ORDER BY id
+      FOR UPDATE
+    `;
+    await query`
+      SELECT id
+      FROM career_role_questions
+      WHERE role_assessment_id=${roleAssessmentId}
+      ORDER BY id
+      FOR UPDATE
+    `;
+    await query`
+      SELECT id
+      FROM career_role_answers
+      WHERE role_assessment_id=${roleAssessmentId}
+      ORDER BY id
+      FOR UPDATE
+    `;
+    await query`
+      SELECT cel.evidence_id
+      FROM career_capability_evidence_links cel
+      JOIN career_role_capabilities crc ON crc.id=cel.role_capability_id
+      WHERE crc.role_assessment_id=${roleAssessmentId}
+      ORDER BY cel.role_capability_id, cel.evidence_id
+      FOR UPDATE OF cel
+    `;
+
+    const current = await loadRoleAssessmentSnapshot(roleAssessmentId, client);
+    if (current.stateToken !== initial.stateToken) {
+      throw new CareerIntelligenceError(
+        "The role assessment changed while final review was running. Reload the role and submit it again.",
+        {
+          status: 409,
+          code: "assessment_state_changed",
+          expose: true,
+        },
+      );
+    }
 
     const promotion = await promoteRoleToCandidateProfile({
       roleAssessmentId,
       userId,
       client,
-      snapshot: initial,
+      snapshot: current,
     });
 
     /*

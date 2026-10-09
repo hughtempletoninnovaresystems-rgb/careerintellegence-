@@ -1,4 +1,6 @@
-import { sql } from "@vercel/postgres";
+import { createHash } from "node:crypto";
+import type { CareerQueryClient } from "../data/query-client";
+import { getCareerSql } from "../db/career-sql";
 import { CareerIntelligenceError } from "../errors";
 import { getSuccessGates } from "../success-gates";
 import { formatDateForInput } from "../utils";
@@ -17,6 +19,10 @@ export type RoleCapabilitySnapshot = {
   editedName: string | null;
   editedEvidence: string | null;
   sourceType: string;
+  revisionNo: number;
+  reviewedRevisionNo: number | null;
+  currentSupportingEvidenceCount: number;
+  currentSupportingEvidenceIds: string[];
 };
 
 export type RoleQuestionSnapshot = {
@@ -50,12 +56,15 @@ export type RoleAssessmentSnapshot = {
   capabilities: RoleCapabilitySnapshot[];
   questions: RoleQuestionSnapshot[];
   successGates: Awaited<ReturnType<typeof getSuccessGates>>;
+  stateToken: string;
 };
 
 export async function loadRoleAssessmentSnapshot(
   roleAssessmentId: string,
+  client?: CareerQueryClient,
 ): Promise<RoleAssessmentSnapshot> {
-  const roleResult = await sql`
+  const query = getCareerSql(client);
+  const roleResult = await query`
     SELECT *
     FROM career_role_assessments
     WHERE id=${roleAssessmentId}
@@ -72,10 +81,26 @@ export async function loadRoleAssessmentSnapshot(
 
   const role = roleResult.rows[0];
 
-  const capabilityResult = await sql`
+  const capabilityResult = await query`
     SELECT
       crc.*,
-      c.name AS canonical_name
+      c.name AS canonical_name,
+      crc.revision_no,
+      crc.reviewed_revision_no,
+      (
+        SELECT COUNT(*)::int
+        FROM career_capability_evidence_links cel
+        WHERE cel.role_capability_id=crc.id
+          AND cel.is_current=TRUE
+          AND cel.relationship_type='supporting'
+      ) AS current_supporting_evidence_count,
+      (
+        SELECT COALESCE(array_agg(cel.evidence_id ORDER BY cel.evidence_id), ARRAY[]::uuid[])
+        FROM career_capability_evidence_links cel
+        WHERE cel.role_capability_id=crc.id
+          AND cel.is_current=TRUE
+          AND cel.relationship_type='supporting'
+      ) AS current_supporting_evidence_ids
     FROM career_role_capabilities crc
     LEFT JOIN competencies c
       ON c.id=crc.canonical_competency_id
@@ -83,7 +108,7 @@ export async function loadRoleAssessmentSnapshot(
     ORDER BY crc.created_at, crc.id
   `;
 
-  const questionResult = await sql`
+  const questionResult = await query`
     SELECT
       q.id,
       q.competency,
@@ -110,7 +135,101 @@ export async function loadRoleAssessmentSnapshot(
   `;
 
   const assessmentId = String(role.assessment_id);
-  const successGates = await getSuccessGates(assessmentId, roleAssessmentId);
+  const successGates = await getSuccessGates(assessmentId, roleAssessmentId, client);
+
+  const mappedCapabilities = capabilityResult.rows.map((capability) => ({
+    id: String(capability.id),
+    canonicalCompetencyId: capability.canonical_competency_id
+      ? String(capability.canonical_competency_id)
+      : null,
+    canonicalName: capability.canonical_name
+      ? String(capability.canonical_name)
+      : null,
+    proposedName: String(capability.proposed_competency_name || ""),
+    evidence: String(capability.evidence || ""),
+    confidence: Number(capability.ai_confidence || 0),
+    demonstrated: Boolean(capability.demonstrated),
+    capabilityStatus: String(capability.capability_status || ""),
+    assessmentStatus: String(capability.assessment_status || ""),
+    reviewStatus: String(capability.review_status || ""),
+    editedName: capability.edited_competency_name
+      ? String(capability.edited_competency_name)
+      : null,
+    editedEvidence: capability.edited_evidence
+      ? String(capability.edited_evidence)
+      : null,
+    sourceType: String(capability.source_type || ""),
+    revisionNo: Number(capability.revision_no || 1),
+    reviewedRevisionNo: capability.reviewed_revision_no == null
+      ? null
+      : Number(capability.reviewed_revision_no),
+    currentSupportingEvidenceCount: Number(
+      capability.current_supporting_evidence_count || 0,
+    ),
+    currentSupportingEvidenceIds: Array.isArray(capability.current_supporting_evidence_ids)
+      ? capability.current_supporting_evidence_ids.map(String).sort()
+      : [],
+  }));
+
+  const stateTokenPayload = {
+    role: {
+      id: String(role.id),
+      updatedAt: role.updated_at ? new Date(role.updated_at).toISOString() : null,
+      lifecycleStatus: String(role.lifecycle_status || ""),
+      assessmentId,
+      sequenceNo: Number(role.sequence_no),
+      canonicalRoleId: role.canonical_role_id ? String(role.canonical_role_id) : null,
+      organisationName: String(role.organisation_name || ""),
+      roleTitle: String(role.proposed_role_title || ""),
+      fromDate: formatDateForInput(role.from_date),
+      toDate: role.to_date_precision === "ongoing" ? "" : formatDateForInput(role.to_date),
+      fromDatePrecision: role.from_date_precision ? String(role.from_date_precision) : null,
+      toDatePrecision: role.to_date_precision ? String(role.to_date_precision) : null,
+      fromDateOriginal: role.from_date_original ? String(role.from_date_original) : null,
+      toDateOriginal: role.to_date_original ? String(role.to_date_original) : null,
+      roleDescription: String(role.role_description || ""),
+      engagementModel: String(role.engagement_model || ""),
+      employmentContext: String(role.employment_context || ""),
+    },
+    capabilities: capabilityResult.rows.map((capability) => ({
+      id: String(capability.id),
+      canonicalCompetencyId: capability.canonical_competency_id ? String(capability.canonical_competency_id) : null,
+      canonicalName: capability.canonical_name ? String(capability.canonical_name) : null,
+      confidence: Number(capability.ai_confidence || 0),
+      proposedName: String(capability.proposed_competency_name || ""),
+      editedName: capability.edited_competency_name ? String(capability.edited_competency_name) : null,
+      evidence: String(capability.evidence || ""),
+      editedEvidence: capability.edited_evidence ? String(capability.edited_evidence) : null,
+      demonstrated: capability.demonstrated,
+      capabilityStatus: String(capability.capability_status || ""),
+      assessmentStatus: String(capability.assessment_status || ""),
+      reviewStatus: String(capability.review_status || ""),
+      sourceType: String(capability.source_type || ""),
+      revisionNo: Number(capability.revision_no || 1),
+      reviewedRevisionNo: capability.reviewed_revision_no == null ? null : Number(capability.reviewed_revision_no),
+      currentSupportingEvidenceCount: Number(capability.current_supporting_evidence_count || 0),
+      currentSupportingEvidenceIds: Array.isArray(capability.current_supporting_evidence_ids)
+        ? capability.current_supporting_evidence_ids.map(String).sort()
+        : [],
+      updatedAt: capability.updated_at ? new Date(capability.updated_at).toISOString() : null,
+    })),
+    questions: questionResult.rows.map((question) => ({
+      id: String(question.id),
+      competency: String(question.competency || ""),
+      reason: String(question.reason || ""),
+      question: String(question.question || ""),
+      status: String(question.status || ""),
+      roundNo: Number(question.round_no || 0),
+      updatedAt: question.updated_at ? new Date(question.updated_at).toISOString() : null,
+      answer: question.answer == null ? null : String(question.answer),
+      answeredAt: question.answered_at
+        ? new Date(question.answered_at).toISOString()
+        : null,
+    })),
+  };
+  const stateToken = createHash("sha256")
+    .update(JSON.stringify(stateTokenPayload))
+    .digest("hex");
 
   return {
     roleAssessmentId: String(role.id),
@@ -132,29 +251,7 @@ export async function loadRoleAssessmentSnapshot(
     engagementModel: String(role.engagement_model || ""),
     employmentContext: String(role.employment_context || ""),
     lifecycleStatus: String(role.lifecycle_status || ""),
-    capabilities: capabilityResult.rows.map((capability) => ({
-      id: String(capability.id),
-      canonicalCompetencyId: capability.canonical_competency_id
-        ? String(capability.canonical_competency_id)
-        : null,
-      canonicalName: capability.canonical_name
-        ? String(capability.canonical_name)
-        : null,
-      proposedName: String(capability.proposed_competency_name || ""),
-      evidence: String(capability.evidence || ""),
-      confidence: Number(capability.ai_confidence || 0),
-      demonstrated: Boolean(capability.demonstrated),
-      capabilityStatus: String(capability.capability_status || ""),
-      assessmentStatus: String(capability.assessment_status || ""),
-      reviewStatus: String(capability.review_status || ""),
-      editedName: capability.edited_competency_name
-        ? String(capability.edited_competency_name)
-        : null,
-      editedEvidence: capability.edited_evidence
-        ? String(capability.edited_evidence)
-        : null,
-      sourceType: String(capability.source_type || ""),
-    })),
+    capabilities: mappedCapabilities,
     questions: questionResult.rows.map((question) => ({
       id: String(question.id),
       competency: String(question.competency || ""),
@@ -168,6 +265,7 @@ export async function loadRoleAssessmentSnapshot(
         : null,
     })),
     successGates,
+    stateToken,
   };
 }
 

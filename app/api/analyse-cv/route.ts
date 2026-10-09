@@ -55,6 +55,7 @@ import { getCorrelationId, withCorrelationId } from "@/app/lib/career-intelligen
 
 
 import { reviewRoleCapability } from "@/app/lib/career-intelligence/services/capability-review";
+import { recordCapabilityEvidence } from "@/app/lib/career-intelligence/services/provenance";
 
 
 
@@ -1599,6 +1600,7 @@ ${cvText}
 
 
         cvExtractionSchema,
+      context: { operation: "cv_document_extraction" },
 
 
 
@@ -2207,6 +2209,7 @@ ${JSON.stringify({
   const parsed = await generateValidatedJson({
     prompt,
     schema: cvCapabilitySignalAssessmentSchema,
+      context: { operation: "cv_capability_signal_assessment" },
   });
 
   return parsed.results;
@@ -2716,6 +2719,7 @@ ${JSON.stringify(
 
 
         gapListSchema,
+      context: { operation: "cv_gap_question_generation" },
 
 
 
@@ -5640,6 +5644,7 @@ ${evidence}
 
 
 `,
+      context: { assessmentId, roleAssessmentId, operation: "cv_capability_edit_reassessment" },
 
 
 
@@ -6627,7 +6632,28 @@ ${evidence}
 
 
 
-  let emergingCapabilitiesStaged =
+  // Preserve the candidate's edited text as a distinct source record. The
+  // SQL revision trigger's generic snapshot is contextual only and cannot by
+  // itself qualify this capability for profile promotion.
+  await recordCapabilityEvidence({
+    roleAssessmentId,
+    roleCapabilityId: capabilityId,
+    sourceType: "candidate_edit_reassessment",
+    evidenceText: evidence,
+    relationshipType:
+      outcome === "demonstrated"
+        ? "supporting"
+        : outcome === "gap"
+          ? "contradictory"
+          : "context",
+    provenance: {
+      origin: "candidate_supplied_edit",
+      reassessmentOutcome: outcome,
+      locatorAvailable: false,
+    },
+  });
+
+  let emergingCapabilitiesStaged =
 
 
 

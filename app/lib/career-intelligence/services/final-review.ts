@@ -72,6 +72,11 @@ ${JSON.stringify({
   const parsed = await generateValidatedJson({
     prompt,
     schema: finalSubmissionCheckSchema,
+    context: {
+      assessmentId: role.assessmentId,
+      roleAssessmentId: role.roleAssessmentId,
+      operation: "final_role_review",
+    },
   });
 
   return {

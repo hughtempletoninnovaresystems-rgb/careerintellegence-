@@ -109,9 +109,11 @@ export async function recordSuccessGateAtomic(
 export async function getSuccessGates(
   assessmentId: string,
   roleAssessmentId?: string,
+  client?: CareerQueryClient,
 ): Promise<SuccessGate[]> {
+  const query = getCareerSql(client);
   const result = roleAssessmentId
-    ? await sql`
+    ? await query`
         SELECT
           id,
           assessment_id,
@@ -126,7 +128,7 @@ export async function getSuccessGates(
           AND role_assessment_id = ${roleAssessmentId}
         ORDER BY achieved_at, id
       `
-    : await sql`
+    : await query`
         SELECT
           id,
           assessment_id,

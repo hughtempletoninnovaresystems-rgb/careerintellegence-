@@ -2,6 +2,8 @@ import { sql } from "@vercel/postgres";
 import type { CareerQueryClient } from "../data/query-client";
 import { getCareerSql } from "../db/career-sql";
 import { proposeRepositoryKnowledge } from "./repository-enrichment";
+import { isPromotionEligible } from "./promotion-eligibility";
+export { isPromotionEligible } from "./promotion-eligibility";
 import {
   loadRoleAssessmentSnapshot,
   type RoleAssessmentSnapshot,
@@ -20,14 +22,6 @@ import {
  * a connected client by the role-completion service, all Profile and
  * Repository writes participate in the caller's transaction.
  */
-
-function isPromotionEligible(capability: any) {
-  return (
-    capability.capabilityStatus === "demonstrated" &&
-    capability.assessmentStatus === "assessed" &&
-    capability.reviewStatus === "accepted"
-  );
-}
 
 export type PromotionResult = {
   profileRoleId: string;

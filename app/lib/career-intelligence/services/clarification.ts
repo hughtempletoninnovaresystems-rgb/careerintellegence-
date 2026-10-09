@@ -11,6 +11,7 @@ import { AIProviderError, CareerIntelligenceError } from "../errors";
 import { recordSuccessGate } from "../success-gates";
 import type { Evaluation, Gap } from "../types";
 import { clamp } from "../utils";
+import { recordCapabilityEvidence } from "./provenance";
 import { transitionRoleLifecycle } from "./role-lifecycle";
 import { loadRoleAssessmentSnapshot } from "./role-snapshot";
 
@@ -89,6 +90,11 @@ ${JSON.stringify(answers)}
   const parsed = await generateValidatedJson({
     prompt,
     schema: evaluationListSchema,
+    context: {
+      assessmentId: role.assessmentId,
+      roleAssessmentId: role.roleAssessmentId,
+      operation: "clarification_evaluation",
+    },
   });
 
   const submittedIds = new Set(answers.map((answer) => answer.questionId));
@@ -305,7 +311,7 @@ export async function assessRoleClarifications({
         AND status='open'
     `;
 
-    await sql`
+    const savedAnswer = await sql`
       INSERT INTO career_role_answers (
         question_id,
         role_assessment_id,
@@ -324,7 +330,17 @@ export async function assessRoleClarifications({
         ${evaluation.confidence},
         NOW()
       )
+      RETURNING id
     `;
+    const sourceAnswerId = savedAnswer.rows[0]?.id
+      ? String(savedAnswer.rows[0].id)
+      : null;
+    if (!sourceAnswerId) {
+      throw new CareerIntelligenceError(
+        "The clarification answer could not be linked to its assessment evidence.",
+        { status: 500, code: "answer_provenance_persistence_failed", expose: true },
+      );
+    }
 
     const capabilityName =
       evaluation.competency || answer.competency;
@@ -371,6 +387,21 @@ export async function assessRoleClarifications({
             AND role_assessment_id=${roleAssessmentId}
         `;
 
+        await recordCapabilityEvidence({
+          roleAssessmentId,
+          roleCapabilityId: existingSignal.id,
+          sourceType: "clarification_answer",
+          evidenceText: evaluation.evidence,
+          sourceQuestionId: answer.questionId,
+          sourceAnswerId,
+          relationshipType: "supporting",
+          provenance: {
+            evaluationStatus: evaluation.status,
+            confidence: clamp(evaluation.confidence),
+            sourceAnswerTextLength: answer.answer.trim().length,
+          },
+        });
+
         existingSignal.canonicalCompetencyId =
           canonicalCompetencyId ||
           existingSignal.canonicalCompetencyId;
@@ -387,6 +418,9 @@ export async function assessRoleClarifications({
           sourceSection: "candidate_answer",
           evidence: evaluation.evidence,
           confidence: evaluation.confidence,
+          sourceQuestionId: answer.questionId,
+          sourceAnswerId,
+          evidenceRelationshipType: "supporting",
           demonstrated: true,
           capabilityStatus: "demonstrated",
           assessmentStatus: "assessed",
@@ -424,6 +458,20 @@ export async function assessRoleClarifications({
             AND role_assessment_id=${roleAssessmentId}
         `;
 
+        await recordCapabilityEvidence({
+          roleAssessmentId,
+          roleCapabilityId: existingSignal.id,
+          sourceType: "clarification_answer",
+          evidenceText: evaluation.evidence,
+          sourceQuestionId: answer.questionId,
+          sourceAnswerId,
+          relationshipType: "contradictory",
+          provenance: {
+            evaluationStatus: evaluation.status,
+            confidence: clamp(evaluation.confidence),
+          },
+        });
+
         existingSignal.canonicalCompetencyId =
           canonicalCompetencyId ||
           existingSignal.canonicalCompetencyId;
@@ -445,6 +493,9 @@ export async function assessRoleClarifications({
           sourceSection: "candidate_answer",
           evidence: evaluation.evidence,
           confidence: evaluation.confidence,
+          sourceQuestionId: answer.questionId,
+          sourceAnswerId,
+          evidenceRelationshipType: "contradictory",
           demonstrated: false,
           capabilityStatus: "gap",
           assessmentStatus: "assessed",
@@ -517,6 +568,9 @@ export async function assessRoleClarifications({
         sourceSection: "emerging_capability",
         evidence: emerging.evidence,
         confidence: emerging.confidence,
+        sourceQuestionId: answer.questionId,
+        sourceAnswerId,
+        evidenceRelationshipType: "supporting",
         demonstrated: true,
         capabilityStatus: "demonstrated",
         assessmentStatus: "assessed",
