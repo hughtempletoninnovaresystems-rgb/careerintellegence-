@@ -31,13 +31,37 @@ export async function getExperiences(): Promise<ExperienceItem[]> {
       cra.to_date::text AS to_date, cra.to_date_precision, cra.lifecycle_status,
       (SELECT COUNT(*)::int FROM career_role_capabilities crc
         WHERE crc.role_assessment_id = cra.id) AS capability_count,
-      (SELECT COUNT(DISTINCT crc.canonical_competency_id)::int
-        FROM career_role_capabilities crc
-        WHERE crc.role_assessment_id = cra.id AND crc.canonical_competency_id IS NOT NULL) AS knowledge_count,
-      (SELECT COUNT(DISTINCT cel.evidence_id)::int
-        FROM career_role_capabilities crc
-        JOIN career_capability_evidence_links cel ON cel.role_capability_id = crc.id
-        WHERE crc.role_assessment_id = cra.id AND cel.is_current = TRUE) AS evidence_count,
+      (SELECT COUNT(*)::int FROM (
+        SELECT crc.canonical_competency_id AS id
+        FROM career_role_capabilities crc WHERE crc.role_assessment_id = cra.id
+          AND crc.canonical_competency_id IS NOT NULL AND crc.review_status <> 'rejected'
+        UNION SELECT ck.competency_id FROM candidate_knowledge ck
+          WHERE ck.user_id = ${userId} AND ck.role_id = cra.canonical_role_id
+        UNION SELECT prc.competency_id
+          FROM candidate_profile_role_capabilities prc
+          JOIN candidate_profile_roles pr ON pr.id = prc.candidate_profile_role_id
+          WHERE pr.user_id = ${userId} AND pr.source_role_assessment_id = cra.id
+            AND prc.active = TRUE AND prc.competency_id IS NOT NULL
+      ) linked_knowledge) AS knowledge_count,
+      (SELECT COUNT(*)::int FROM (
+        SELECT ce.id::text AS id FROM career_capability_evidence ce
+          WHERE ce.role_assessment_id = cra.id
+            AND ce.assessment_id = cra.assessment_id
+        UNION
+        SELECT ce.id::text AS id FROM career_capability_evidence ce
+          JOIN career_capability_evidence_links cel ON cel.evidence_id = ce.id
+          JOIN career_role_capabilities crc ON crc.id = cel.role_capability_id
+          WHERE crc.role_assessment_id = cra.id AND ce.assessment_id = cra.assessment_id
+        UNION
+        SELECT ke.id::text FROM knowledge_evidence ke
+          JOIN candidate_knowledge ck ON ck.id = ke.candidate_knowledge_id
+          WHERE ck.user_id = ${userId} AND ck.role_id = cra.canonical_role_id
+        UNION
+        SELECT prc.id::text FROM candidate_profile_role_capabilities prc
+          JOIN candidate_profile_roles pr ON pr.id = prc.candidate_profile_role_id
+          WHERE pr.user_id = ${userId} AND pr.source_role_assessment_id = cra.id
+            AND prc.active = TRUE AND NULLIF(TRIM(prc.evidence), '') IS NOT NULL
+      ) linked_evidence) AS evidence_count,
       (SELECT COUNT(*)::int FROM career_role_capabilities crc
         WHERE crc.role_assessment_id = cra.id
           AND (crc.capability_status = 'needs_clarification'

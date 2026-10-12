@@ -52,12 +52,22 @@ export async function getCareerProfileData(): Promise<CareerProfileData> {
       WHERE ca.user_id = ${userId}
     `,
     sql`
-      SELECT COUNT(DISTINCT c.id)::int AS knowledge_count
-      FROM career_role_capabilities crc
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      LEFT JOIN competencies c ON c.id = crc.canonical_competency_id
-      WHERE ca.user_id = ${userId} AND c.id IS NOT NULL
+      SELECT COUNT(*)::int AS knowledge_count FROM (
+        SELECT ck.competency_id AS id
+        FROM candidate_knowledge ck WHERE ck.user_id = ${userId}
+        UNION
+        SELECT crc.canonical_competency_id
+        FROM career_role_capabilities crc
+        JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
+        JOIN career_assessments ca ON ca.id = cra.assessment_id
+        WHERE ca.user_id = ${userId} AND crc.canonical_competency_id IS NOT NULL
+          AND crc.review_status <> 'rejected'
+        UNION
+        SELECT prc.competency_id
+        FROM candidate_profile_role_capabilities prc
+        JOIN candidate_profile_roles pr ON pr.id = prc.candidate_profile_role_id
+        WHERE pr.user_id = ${userId} AND prc.active = TRUE AND prc.competency_id IS NOT NULL
+      ) areas
     `,
     getProfileEvidenceCount(),
   ]);

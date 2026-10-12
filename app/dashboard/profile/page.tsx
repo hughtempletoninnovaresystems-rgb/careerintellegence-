@@ -92,8 +92,8 @@ export default async function CareerProfilePage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Experiences" value={experienceCount} detail="Career roles recorded" />
           <StatCard label="Capabilities" value={capabilityCount} detail="Identified skills and abilities" />
-          <StatCard label="Knowledge areas" value={knowledgeCount} detail="Linked canonical competencies" />
-          <StatCard label="Evidence items" value={evidenceCount} detail="Current linked evidence" />
+          <StatCard label="Knowledge areas" value={knowledgeCount} detail="Saved and assessed knowledge" />
+          <StatCard label="Evidence items" value={evidenceCount} detail="Evidence across your career profile" />
         </div>
       </section>
 
