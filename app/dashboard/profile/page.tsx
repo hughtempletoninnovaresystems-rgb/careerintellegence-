@@ -1,21 +1,8 @@
 import Link from 'next/link';
-import { sql } from '@vercel/postgres';
 import { auth } from '@/auth';
-import { getAuthenticatedUserId } from '@/app/lib/career-intelligence/auth';
+import { getCareerProfileData, type ProfileRole } from '@/app/lib/career-intelligence/data/profile';
 
 export const dynamic = 'force-dynamic';
-
-type RoleRow = {
-  id: string;
-  organisation_name: string | null;
-  proposed_role_title: string | null;
-  from_date: string | null;
-  to_date: string | null;
-  to_date_precision: string | null;
-  lifecycle_status: string | null;
-  role_description?: string | null;
-  assessment_id: string;
-};
 
 function dateLabel(value: string | null, precision?: string | null) {
   if (precision === 'ongoing' || !value) return precision === 'ongoing' ? 'Present' : 'Date not recorded';
@@ -49,7 +36,7 @@ function SectionHeading({ eyebrow, title, action }: { eyebrow: string; title: st
 export default async function CareerProfilePage() {
   const session = await auth();
   const displayName = session?.user?.name?.trim() || 'Your career profile';
-  let roles: RoleRow[] = [];
+  let roles: ProfileRole[] = [];
   let capabilityCount = 0;
   let knowledgeCount = 0;
   let evidenceCount = 0;
@@ -60,55 +47,15 @@ export default async function CareerProfilePage() {
   let summary = 'Build a consolidated view of your experience, capabilities and supporting evidence.';
 
   try {
-    const userId = await getAuthenticatedUserId();
-    const roleResult = await sql`
-      SELECT cra.id, cra.assessment_id, cra.organisation_name, cra.proposed_role_title,
-             cra.from_date::text AS from_date, cra.to_date::text AS to_date,
-             cra.to_date_precision, cra.lifecycle_status, cra.role_description
-      FROM career_role_assessments cra
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      WHERE ca.user_id = ${userId}
-      ORDER BY cra.sequence_no DESC, cra.created_at DESC
-    `;
-    roles = roleResult.rows as RoleRow[];
+    const profile = await getCareerProfileData();
+    roles = profile.roles;
     experienceCount = roles.length;
-
-    const counts = await sql`
-      SELECT
-        COUNT(*)::int AS capability_count,
-        COUNT(*) FILTER (WHERE crc.demonstrated = TRUE AND crc.capability_status = 'demonstrated' AND crc.assessment_status = 'assessed')::int AS evidenced_count,
-        COUNT(*) FILTER (WHERE crc.demonstrated IS NULL OR crc.capability_status IN ('signal', 'needs_clarification') OR crc.assessment_status = 'needs_clarification')::int AS needs_evidence_count,
-        COUNT(*) FILTER (WHERE crc.demonstrated = TRUE AND (crc.review_status IS NULL OR crc.review_status NOT IN ('accepted', 'edited', 'rejected')))::int AS awaiting_review_count
-      FROM career_role_capabilities crc
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      WHERE ca.user_id = ${userId}
-    `;
-    const row = counts.rows[0] || {};
-    capabilityCount = Number(row.capability_count || 0);
-    evidencedCount = Number(row.evidenced_count || 0);
-    needsEvidenceCount = Number(row.needs_evidence_count || 0);
-    awaitingReviewCount = Number(row.awaiting_review_count || 0);
-
-    const evidence = await sql`
-      SELECT COUNT(DISTINCT ccel.evidence_id)::int AS evidence_count
-      FROM career_capability_evidence_links ccel
-      JOIN career_role_capabilities crc ON crc.id = ccel.role_capability_id
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      WHERE ca.user_id = ${userId} AND ccel.is_current = TRUE
-    `;
-    evidenceCount = Number(evidence.rows[0]?.evidence_count || 0);
-
-    const knowledge = await sql`
-      SELECT COUNT(DISTINCT c.id)::int AS knowledge_count
-      FROM career_role_capabilities crc
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      LEFT JOIN competencies c ON c.id = crc.canonical_competency_id
-      WHERE ca.user_id = ${userId} AND c.id IS NOT NULL
-    `;
-    knowledgeCount = Number(knowledge.rows[0]?.knowledge_count || 0);
+    capabilityCount = profile.capabilityCount;
+    knowledgeCount = profile.knowledgeCount;
+    evidenceCount = profile.evidenceCount;
+    evidencedCount = profile.evidencedCount;
+    needsEvidenceCount = profile.needsEvidenceCount;
+    awaitingReviewCount = profile.awaitingReviewCount;
 
     const latestDescription = roles.find((role) => role.role_description?.trim())?.role_description;
     if (latestDescription?.trim()) summary = latestDescription.trim();

@@ -1,14 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { sql } from '@vercel/postgres';
-import { getAuthenticatedUserId } from '@/app/lib/career-intelligence/auth';
+import { getCapabilityDetail, type CapabilityDetailRow, type CapabilityRoleRow } from '@/app/lib/career-intelligence/data/capabilities';
+import type { CapabilityEvidenceRow } from '@/app/lib/career-intelligence/data/evidence';
 
 export const dynamic = 'force-dynamic';
 
 type Props = { params: { id: string } };
-type RoleRow = { id: string; proposed_role_title: string | null; organisation_name: string | null; from_date: string | null; to_date: string | null; to_date_precision: string | null };
-type EvidenceRow = { evidence_id: string; evidence_text: string | null; relationship_type: string | null; source_type: string | null };
-
 function dateLabel(value: string | null, precision: string | null) {
   if (precision === 'ongoing' || !value) return precision === 'ongoing' ? 'Present' : 'Date not recorded';
   const date = new Date(value);
@@ -17,49 +14,17 @@ function dateLabel(value: string | null, precision: string | null) {
 
 export default async function CapabilityDetailPage({ params }: Props) {
   const { id } = params;
-  let capability: any = null;
-  let roles: RoleRow[] = [];
-  let evidence: EvidenceRow[] = [];
+  let capability: CapabilityDetailRow | null = null;
+  let roles: CapabilityRoleRow[] = [];
+  let evidence: CapabilityEvidenceRow[] = [];
   let knowledge: string[] = [];
   try {
-    const userId = await getAuthenticatedUserId();
-    const result = await sql`
-      SELECT crc.*, COALESCE(NULLIF(crc.edited_competency_name, ''), NULLIF(c.name, ''), NULLIF(crc.proposed_competency_name, '')) AS display_name,
-             c.name AS canonical_name
-      FROM career_role_capabilities crc
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      LEFT JOIN competencies c ON c.id = crc.canonical_competency_id
-      WHERE crc.id::text = ${id} AND ca.user_id = ${userId}
-      LIMIT 1
-    `;
-    capability = result.rows[0] || null;
-    if (!capability) notFound();
-    const roleResult = await sql`
-      SELECT cra.id::text AS id, cra.proposed_role_title, cra.organisation_name,
-             cra.from_date::text AS from_date, cra.to_date::text AS to_date, cra.to_date_precision
-      FROM career_role_assessments cra
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      JOIN career_role_capabilities crc ON crc.role_assessment_id = cra.id
-      WHERE crc.id::text = ${id} AND ca.user_id = ${userId}
-      ORDER BY cra.sequence_no DESC, cra.created_at DESC
-    `;
-    roles = roleResult.rows as RoleRow[];
-    const evidenceResult = await sql`
-      SELECT cel.evidence_id::text AS evidence_id, ce.evidence_text, cel.relationship_type, ce.source_type
-      FROM career_capability_evidence_links cel
-      JOIN career_role_capabilities crc ON crc.id = cel.role_capability_id
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      LEFT JOIN career_capability_evidence ce ON ce.id = cel.evidence_id
-      WHERE crc.id::text = ${id} AND ca.user_id = ${userId} AND cel.is_current = TRUE
-      ORDER BY cel.relationship_type, cel.evidence_id
-    `;
-    evidence = evidenceResult.rows as EvidenceRow[];
-    if (capability.canonical_competency_id) {
-      const knowledgeResult = await sql`SELECT name FROM competencies WHERE id = ${capability.canonical_competency_id}`;
-      knowledge = knowledgeResult.rows.map((row: any) => String(row.name));
-    }
+    const detail = await getCapabilityDetail(id);
+    if (!detail) notFound();
+    capability = detail.capability;
+    roles = detail.roles;
+    evidence = detail.evidence;
+    knowledge = detail.knowledge;
   } catch (error) {
     if (error && typeof error === 'object' && 'digest' in error) throw error;
     console.error('Unable to load capability detail:', error);

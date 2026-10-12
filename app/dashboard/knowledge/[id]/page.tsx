@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import {
-  getExperience, getKnowledgeArea, getKnowledgeCapabilities, getKnowledgeEvidence,
-  knowledgeDomain, experienceDateRange,
-} from '@/app/lib/career-intelligence/data/career-pages';
+import { getExperience } from '@/app/lib/career-intelligence/data/experience';
+import { getKnowledgeArea } from '@/app/lib/career-intelligence/data/knowledge';
+import { getKnowledgeCapabilities } from '@/app/lib/career-intelligence/data/capabilities';
+import { getKnowledgeEvidence } from '@/app/lib/career-intelligence/data/evidence';
+import { experienceDateRange, knowledgeDomain } from '@/app/lib/career-intelligence/domain/career-display';
 
 export const dynamic = 'force-dynamic';
 

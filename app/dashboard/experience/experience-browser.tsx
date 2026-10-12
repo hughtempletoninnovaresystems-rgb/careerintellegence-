@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BriefcaseIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline';
-import { experienceDateRange, type ExperienceItem } from '@/app/lib/career-intelligence/data/career-pages';
+import type { ExperienceItem } from '@/app/lib/career-intelligence/data/experience';
+import { experienceDateRange } from '@/app/lib/career-intelligence/domain/career-display';
 
 type Filter = 'all' | 'current' | 'attention';
 

@@ -1,4 +1,4 @@
-import { getExperiences } from '@/app/lib/career-intelligence/data/career-pages';
+import { getExperiences } from '@/app/lib/career-intelligence/data/experience';
 import ExperienceBrowser from './experience-browser';
 
 export const dynamic = 'force-dynamic';

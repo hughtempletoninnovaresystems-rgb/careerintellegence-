@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AcademicCapIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import { knowledgeDomain, type ExperienceItem, type KnowledgeItem } from '@/app/lib/career-intelligence/data/career-pages';
+import type { ExperienceItem } from '@/app/lib/career-intelligence/data/experience';
+import type { KnowledgeItem } from '@/app/lib/career-intelligence/data/knowledge';
+import { knowledgeDomain } from '@/app/lib/career-intelligence/domain/career-display';
 
 const domainOrder = ['Transformation & Change', 'Programme & Delivery', 'Leadership & People', 'Technology & Methods', 'Other knowledge'];
 

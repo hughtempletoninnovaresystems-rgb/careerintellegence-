@@ -1,22 +1,7 @@
 import Link from 'next/link';
-import { sql } from '@vercel/postgres';
-import { auth } from '@/auth';
-import { getAuthenticatedUserId } from '@/app/lib/career-intelligence/auth';
+import { getCapabilities, type CapabilityRow } from '@/app/lib/career-intelligence/data/capabilities';
 
 export const dynamic = 'force-dynamic';
-
-type CapabilityRow = {
-  id: string;
-  name: string | null;
-  demonstrated: boolean | null;
-  capability_status: string | null;
-  assessment_status: string | null;
-  review_status: string | null;
-  evidence_strength: number | null;
-  role_count: number | string;
-  evidence_count: number | string;
-  roles: string | null;
-};
 
 function statusLabel(row: CapabilityRow) {
   if (row.review_status === 'accepted' || row.review_status === 'edited') return 'Confirmed';
@@ -26,34 +11,10 @@ function statusLabel(row: CapabilityRow) {
 }
 
 export default async function CapabilitiesPage() {
-  const session = await auth();
   let capabilities: CapabilityRow[] = [];
   let loadError = false;
   try {
-    const userId = await getAuthenticatedUserId();
-    const result = await sql`
-      SELECT
-        crc.id::text AS id,
-        COALESCE(NULLIF(crc.edited_competency_name, ''), NULLIF(c.name, ''), NULLIF(crc.proposed_competency_name, '')) AS name,
-        crc.demonstrated,
-        crc.capability_status,
-        crc.assessment_status,
-        crc.review_status,
-        crc.ai_confidence AS evidence_strength,
-        COUNT(DISTINCT cra.id)::int AS role_count,
-        COUNT(DISTINCT cel.evidence_id) FILTER (WHERE cel.is_current = TRUE)::int AS evidence_count,
-        STRING_AGG(DISTINCT CONCAT(COALESCE(cra.proposed_role_title, 'Role not recorded'), ' — ', COALESCE(cra.organisation_name, 'Organisation not recorded')), '||') AS roles
-      FROM career_role_capabilities crc
-      JOIN career_role_assessments cra ON cra.id = crc.role_assessment_id
-      JOIN career_assessments ca ON ca.id = cra.assessment_id
-      LEFT JOIN competencies c ON c.id = crc.canonical_competency_id
-      LEFT JOIN career_capability_evidence_links cel ON cel.role_capability_id = crc.id
-      WHERE ca.user_id = ${userId}
-      GROUP BY crc.id, c.name
-      ORDER BY CASE WHEN crc.review_status IN ('accepted', 'edited') THEN 0 WHEN crc.demonstrated = TRUE THEN 1 ELSE 2 END,
-               COALESCE(NULLIF(crc.edited_competency_name, ''), NULLIF(c.name, ''), NULLIF(crc.proposed_competency_name, '')) ASC
-    `;
-    capabilities = result.rows as CapabilityRow[];
+    capabilities = await getCapabilities();
   } catch (error) {
     console.error('Unable to load capabilities:', error);
     loadError = true;

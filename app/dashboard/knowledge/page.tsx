@@ -1,4 +1,5 @@
-import { getExperiences, getKnowledgeAreas } from '@/app/lib/career-intelligence/data/career-pages';
+import { getExperiences } from '@/app/lib/career-intelligence/data/experience';
+import { getKnowledgeAreas } from '@/app/lib/career-intelligence/data/knowledge';
 import KnowledgeBrowser from './knowledge-browser';
 
 export const dynamic = 'force-dynamic';
