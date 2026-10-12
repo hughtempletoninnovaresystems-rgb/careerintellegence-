@@ -1754,6 +1754,13 @@ export default function CVUpload() {
       return;
     }
 
+    if (!editedCapabilityEvidence.trim()) {
+      setMessage(
+        "Capability evidence is required to save an edit."
+      );
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 

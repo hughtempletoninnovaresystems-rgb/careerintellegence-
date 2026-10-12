@@ -80,7 +80,7 @@ export default async function CapabilitiesPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm text-slate-500">Evidence-linked</p><p className="mt-2 text-3xl font-semibold text-violet-700">{capabilities.filter((item) => Number(item.evidence_count) > 0).length}</p><p className="mt-1 text-xs text-slate-500">Capabilities with current evidence</p></div>
       </section>
 
-      {loadError ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">We could not load your capabilities. Please check that the Career Intelligence database migrations have been applied, then refresh this page.</div> : capabilities.length ? (
+      {loadError ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">We couldn't load your capabilities. Please check that the Career Intelligence database migrations have been applied, then refresh this page.</div> : capabilities.length ? (
         <section className="space-y-3">
           {capabilities.map((item) => {
             const confirmedItem = item.review_status === 'accepted' || item.review_status === 'edited';

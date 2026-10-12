@@ -5908,7 +5908,11 @@ ${evidence}
 
 
 
-          'proposed',
+          'edited',
+
+
+
+        reviewed_revision_no = revision_no + 1,
 
 
 
@@ -6297,6 +6301,10 @@ ${evidence}
 
 
           'assessed',
+
+
+
+        reviewed_revision_no = revision_no + 1,
 
 
 
