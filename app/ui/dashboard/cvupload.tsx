@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /*
  * ============================================================
@@ -814,6 +814,15 @@ export default function CVUpload() {
     setRoleContextEditing,
   ] =
     useState(true);
+
+  // Support “Add Experience” links from the career timeline by opening the
+  // existing manual career-assessment entry screen (no duplicate save flow).
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("source") === "manual") {
+      setJourneySource("manual");
+      setViewMode("manual");
+    }
+  }, []);
 
   /* ============================================================
      DERIVED STATE
