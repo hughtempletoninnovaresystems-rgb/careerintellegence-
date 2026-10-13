@@ -23,7 +23,7 @@ export async function GET() {
     ]);
     return new NextResponse(JSON.stringify({
       exportedAt: new Date().toISOString(),
-      format: 'projectgreat-career-snapshot-v1',
+      format: 'career-intelligence-snapshot-v1',
       note: 'Career profile snapshot; not a full personal-data subject-access export.',
       account: account.rows[0] ?? null,
       assessments: assessments.rows,
@@ -37,7 +37,7 @@ export async function GET() {
       status: 200,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="projectgreat-career-${new Date().toISOString().slice(0, 10)}.json"`,
+        'Content-Disposition': `attachment; filename="career-intelligence-${new Date().toISOString().slice(0, 10)}.json"`,
         'Cache-Control': 'private, no-store, max-age=0',
         'X-Content-Type-Options': 'nosniff',
       },

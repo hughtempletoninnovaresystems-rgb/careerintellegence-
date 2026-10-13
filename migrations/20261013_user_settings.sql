@@ -1,4 +1,4 @@
--- ProjectGreat Settings. Run once against the same Neon database as the application.
+-- Career Intelligence Settings. Run once against the same Neon database as the application.
 -- Additive only: does not alter Career Intelligence assessment data.
 BEGIN;
 

@@ -23,6 +23,6 @@ input[type='number']::-webkit-outer-spin-button {
   html *::before,
   html *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
-html[data-pg-motion='reduced'] *,
-html[data-pg-motion='reduced'] *::before,
-html[data-pg-motion='reduced'] *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+html[data-ci-motion='reduced'] *,
+html[data-ci-motion='reduced'] *::before,
+html[data-ci-motion='reduced'] *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }

@@ -1,4 +1,4 @@
-# ProjectGreat Settings page (no subscription or billing code)
+# Career Intelligence Settings page (no subscription or billing code)
 
 ## Included
 
