@@ -83,3 +83,10 @@ export async function getCareerProfileData(): Promise<CareerProfileData> {
     awaitingReviewCount: Number(row.awaiting_review_count || 0),
   };
 }
+
+/** Fresh account name, avoiding stale names held in the NextAuth JWT session. */
+export async function getAccountDisplayName(): Promise<string> {
+  const userId = await getAuthenticatedUserId();
+  const result = await sql`SELECT name FROM users WHERE id = ${userId} LIMIT 1`;
+  return String(result.rows[0]?.name || 'Your career profile');
+}

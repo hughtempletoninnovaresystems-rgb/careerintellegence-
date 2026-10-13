@@ -16,3 +16,13 @@ input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* Respect the operating system preference and the user's dashboard override. */
+@media (prefers-reduced-motion: reduce) {
+  html *,
+  html *::before,
+  html *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+html[data-pg-motion='reduced'] *,
+html[data-pg-motion='reduced'] *::before,
+html[data-pg-motion='reduced'] *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }

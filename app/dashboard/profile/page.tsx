@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { auth } from '@/auth';
-import { getCareerProfileData, type ProfileRole } from '@/app/lib/career-intelligence/data/profile';
+import { getAccountDisplayName, getCareerProfileData, type ProfileRole } from '@/app/lib/career-intelligence/data/profile';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +33,7 @@ function SectionHeading({ eyebrow, title, action }: { eyebrow: string; title: st
 }
 
 export default async function CareerProfilePage() {
-  const session = await auth();
-  const displayName = session?.user?.name?.trim() || 'Your career profile';
+  let displayName = 'Your career profile';
   let roles: ProfileRole[] = [];
   let capabilityCount = 0;
   let knowledgeCount = 0;
@@ -47,6 +45,7 @@ export default async function CareerProfilePage() {
   let summary = 'Build a consolidated view of your experience, capabilities and supporting evidence.';
 
   try {
+    displayName = await getAccountDisplayName();
     const profile = await getCareerProfileData();
     roles = profile.roles;
     experienceCount = roles.length;
