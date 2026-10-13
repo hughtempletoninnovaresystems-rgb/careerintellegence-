@@ -5199,31 +5199,31 @@ async function reassessEditedCapability({
 
 
 
-      SELECT id
+      SELECT id
 
 
 
-      FROM career_role_capabilities
+      FROM career_role_capabilities
 
 
 
-      WHERE id = ${capabilityId}
+      WHERE id = ${capabilityId}
 
 
 
-        AND role_assessment_id =
+        AND role_assessment_id =
 
 
 
-          ${roleAssessmentId}
+          ${roleAssessmentId}
 
 
 
-      LIMIT 1
+      LIMIT 1
 
 
 
-    `;
+    `;
 
 
 
@@ -5836,107 +5836,107 @@ ${evidence}
 
 
 
-      UPDATE career_role_capabilities
+      UPDATE career_role_capabilities
 
 
 
-      SET
+      SET
 
 
 
-        edited_competency_name =
+        edited_competency_name =
 
 
 
-          ${competencyName},
+          ${competencyName},
 
 
 
-        edited_evidence =
+        edited_evidence =
 
 
 
-          ${evidence},
+          ${evidence},
 
 
 
-        canonical_competency_id =
+        canonical_competency_id =
 
 
 
-          ${canonicalCompetencyId},
+          ${canonicalCompetencyId},
 
 
 
-        evidence =
+        evidence =
 
 
 
-          ${assessedEvidence},
+          ${assessedEvidence},
 
 
 
-        ai_confidence =
+        ai_confidence =
 
 
 
-          ${confidence},
+          ${confidence},
 
 
 
-        demonstrated = TRUE,
+        demonstrated = TRUE,
 
 
 
-        capability_status =
+        capability_status =
 
 
 
-          'demonstrated',
+          'demonstrated',
 
 
 
-        assessment_status =
+        assessment_status =
 
 
 
-          'assessed',
+          'assessed',
 
 
 
-        review_status =
+        review_status =
 
 
 
-          'edited',
+          'edited',
 
 
 
-        reviewed_revision_no = revision_no + 1,
+        reviewed_revision_no = revision_no + 1,
 
 
 
-        updated_at = NOW()
+        updated_at = NOW()
 
 
 
-      WHERE id =
+      WHERE id =
 
 
 
-        ${capabilityId}
+        ${capabilityId}
 
 
 
-        AND role_assessment_id =
+        AND role_assessment_id =
 
 
 
-          ${roleAssessmentId}
+          ${roleAssessmentId}
 
 
 
-    `;
+    `;
 
 
 
@@ -5960,75 +5960,75 @@ ${evidence}
 
 
 
-      UPDATE career_role_capabilities
+      UPDATE career_role_capabilities
 
 
 
-      SET
+      SET
 
 
 
-        edited_competency_name =
+        edited_competency_name =
 
 
 
-          ${competencyName},
+          ${competencyName},
 
 
 
-        edited_evidence =
+        edited_evidence =
 
 
 
-          ${evidence},
+          ${evidence},
 
 
 
-        canonical_competency_id =
+        canonical_competency_id =
 
 
 
-          ${canonicalCompetencyId},
+          ${canonicalCompetencyId},
 
 
 
-        assessment_status =
+        assessment_status =
 
 
 
-          'needs_clarification',
+          'needs_clarification',
 
 
 
-        review_status =
+        review_status =
 
 
 
-          'proposed',
+          'proposed',
 
 
 
-        updated_at = NOW()
+        updated_at = NOW()
 
 
 
-      WHERE id =
+      WHERE id =
 
 
 
-        ${capabilityId}
+        ${capabilityId}
 
 
 
-        AND role_assessment_id =
+        AND role_assessment_id =
 
 
 
-          ${roleAssessmentId}
+          ${roleAssessmentId}
 
 
 
-    `;
+    `;
 
 
 
@@ -6236,71 +6236,71 @@ ${evidence}
 
 
 
-      UPDATE career_role_capabilities
+      UPDATE career_role_capabilities
 
 
 
-      SET
+      SET
 
 
 
-        edited_competency_name =
+        edited_competency_name =
 
 
 
-          ${competencyName},
+          ${competencyName},
 
 
 
-        edited_evidence =
+        edited_evidence =
 
 
 
-          ${evidence},
+          ${evidence},
 
 
 
-        canonical_competency_id =
+        canonical_competency_id =
 
 
 
-          ${canonicalCompetencyId},
+          ${canonicalCompetencyId},
 
 
 
-        evidence =
+        evidence =
 
 
 
-          ${assessedEvidence},
+          ${assessedEvidence},
 
 
 
-        ai_confidence =
+        ai_confidence =
 
 
 
-          ${confidence},
+          ${confidence},
 
 
 
-        demonstrated = FALSE,
+        demonstrated = FALSE,
 
 
 
-        capability_status =
+        capability_status =
 
 
 
-          'gap',
+          'gap',
 
 
 
-        assessment_status =
+        assessment_status =
 
 
 
-          'assessed',
+          'assessed',
 
 
 
@@ -6308,35 +6308,35 @@ ${evidence}
 
 
 
-        review_status =
+        review_status =
 
 
 
-          'accepted',
+          'accepted',
 
 
 
-        updated_at = NOW()
+        updated_at = NOW()
 
 
 
-      WHERE id =
+      WHERE id =
 
 
 
-        ${capabilityId}
+        ${capabilityId}
 
 
 
-        AND role_assessment_id =
+        AND role_assessment_id =
 
 
 
-          ${roleAssessmentId}
+          ${roleAssessmentId}
 
 
 
-    `;
+    `;
 
 
 
@@ -6392,35 +6392,35 @@ ${evidence}
 
 
 
-      SELECT
+      SELECT
 
 
 
-        canonical_competency_id,
+        canonical_competency_id,
 
 
 
-        proposed_competency_name,
+        proposed_competency_name,
 
 
 
-        edited_competency_name
+        edited_competency_name
 
 
 
-      FROM career_role_capabilities
+      FROM career_role_capabilities
 
 
 
-      WHERE role_assessment_id =
+      WHERE role_assessment_id =
 
 
 
-        ${roleAssessmentId}
+        ${roleAssessmentId}
 
 
 
-    `;
+    `;
 
 
 
@@ -7277,47 +7277,47 @@ ${evidence}
 
 
 
-      SELECT
+      SELECT
 
 
 
-        COUNT(*)::int AS count
+        COUNT(*)::int AS count
 
 
 
-      FROM career_role_capabilities
+      FROM career_role_capabilities
 
 
 
-      WHERE role_assessment_id =
+      WHERE role_assessment_id =
 
 
 
-        ${roleAssessmentId}
+        ${roleAssessmentId}
 
 
 
-        AND demonstrated = TRUE
+        AND demonstrated = TRUE
 
 
 
-        AND capability_status =
+        AND capability_status =
 
 
 
-          'demonstrated'
+          'demonstrated'
 
 
 
-        AND review_status =
+        AND review_status =
 
 
 
-          'proposed'
+          'proposed'
 
 
 
-    `;
+    `;
 
 
 
