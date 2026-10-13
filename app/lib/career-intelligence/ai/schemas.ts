@@ -76,3 +76,39 @@ export const cvExtractionSchema = z.object({
   candidateName: z.string().max(500).optional().default(""),
   roles: z.array(extractedRoleSchema).max(100).default([]),
 });
+
+// The edited capability name and candidate's source evidence remain authoritative.
+// Non-demonstrated assessments can legitimately contain an empty AI evidence
+// field; clarification questions are required only when clarification is needed.
+export const editedCapabilityReassessmentSchema = z.object({
+  outcome: z.enum(["demonstrated", "needs_clarification", "clarify", "gap"]),
+  evidence: z.string().nullish().transform((value) => value ?? ""),
+  confidence: z.number().min(0).max(1),
+  clarification: z.object({
+    reason: z.string().nullish().transform((value) => value ?? ""),
+    question: z.string().nullish().transform((value) => value ?? ""),
+  }).nullish(),
+  emergingCapabilities: z.array(z.object({
+    name: z.string().default(""),
+    evidence: z.string().default(""),
+    confidence: z.number().min(0).max(1),
+  })).default([]),
+}).superRefine((result, ctx) => {
+  if (result.outcome === "demonstrated" && !result.evidence.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["evidence"],
+      message: "Demonstrated capability must include assessed evidence.",
+    });
+  }
+  if (
+    (result.outcome === "clarify" || result.outcome === "needs_clarification") &&
+    !result.clarification?.question?.trim()
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["clarification", "question"],
+      message: "Clarification outcome requires a question.",
+    });
+  }
+});

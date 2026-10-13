@@ -124,98 +124,120 @@ export async function generateValidatedJson<T>({
   timeoutMs?: number;
   context?: AIInvocationContext;
 }): Promise<T> {
-  const startedAt = Date.now();
-  const promptHash = sha256(prompt);
-  let response: unknown;
+  // A single bounded regeneration handles malformed/incomplete Gemini JSON;
+  // nothing is written to role capabilities until validation has succeeded.
+  let retryHint = "";
 
-  try {
-    response = await withTimeout(
-      getClient().models.generateContent({
-        model,
-        contents: prompt,
-      }),
-      timeoutMs,
-    );
-  } catch (error) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const attemptPrompt = prompt + retryHint;
+    const startedAt = Date.now();
+    const promptHash = sha256(attemptPrompt);
+    let response: unknown;
+
     try {
-      await recordAIInvocation({
-        requestedModel: model,
-        actualModel: null,
-        promptHash,
-        outputHash: null,
-        outcome: "provider_error",
-        errorCode: error instanceof AIProviderError ? "provider_unavailable" : "provider_request_failed",
-        elapsedMs: Date.now() - startedAt,
-        context,
-      });
-    } catch (auditError) {
-      console.error("Unable to record failed AI invocation", {
+      response = await withTimeout(
+        getClient().models.generateContent({
+          model,
+          contents: attemptPrompt,
+          config: { responseMimeType: "application/json" },
+        }),
+        timeoutMs,
+      );
+    } catch (error) {
+      try {
+        await recordAIInvocation({
+          requestedModel: model,
+          actualModel: null,
+          promptHash,
+          outputHash: null,
+          outcome: "provider_error",
+          errorCode: error instanceof AIProviderError ? "provider_unavailable" : "provider_request_failed",
+          elapsedMs: Date.now() - startedAt,
+          context,
+        });
+      } catch (auditError) {
+        console.error("Unable to record failed AI invocation", {
+          operation: context?.operation || "unspecified",
+          errorName: auditError instanceof Error ? auditError.name : "unknown",
+        });
+      }
+
+      if (error instanceof AIProviderError) {
+        throw error;
+      }
+      throw new AIProviderError("The AI assessment service is unavailable.");
+    }
+
+    const outputText = geminiText(response);
+    const actualModel = actualModelVersion(response);
+    let parsed: T;
+
+    try {
+      parsed = parseValidatedJson(outputText, schema);
+    } catch (error) {
+      const validationError = error instanceof AIOutputValidationError ? error : null;
+      try {
+        await recordAIInvocation({
+          requestedModel: model,
+          actualModel,
+          promptHash,
+          outputHash: sha256(outputText),
+          outcome: "invalid_output",
+          errorCode: validationError?.kind === "schema" ? "output_schema_invalid" : "output_json_invalid",
+          elapsedMs: Date.now() - startedAt,
+          context,
+        });
+      } catch (auditError) {
+        console.error("Unable to record invalid AI output", {
+          operation: context?.operation || "unspecified",
+          errorName: auditError instanceof Error ? auditError.name : "unknown",
+        });
+      }
+
+      if (!validationError) throw error;
+
+      console.warn("Invalid AI structured output", {
         operation: context?.operation || "unspecified",
-        errorName: auditError instanceof Error ? auditError.name : "unknown",
+        kind: validationError.kind,
+        fields: validationError.paths,
+        attempt: attempt + 1,
       });
+
+      if (attempt === 0) {
+        const fields = validationError.paths.length
+          ? ` Invalid fields: ${validationError.paths.join(", ")}.`
+          : "";
+        retryHint = `\n\nYour prior answer was not valid JSON matching the requested structure.${fields} Regenerate the entire answer using the same evidence. Output one JSON object only, with correct field types and all required non-empty fields. No markdown.`;
+        continue;
+      }
+      throw new AIProviderError();
     }
 
-    if (error instanceof AIProviderError) {
-      throw error;
-    }
-
-    throw new AIProviderError("The AI assessment service is unavailable.");
-  }
-
-  const outputText = geminiText(response);
-  const actualModel = actualModelVersion(response);
-  let parsed: T;
-
-  try {
-    parsed = parseValidatedJson(outputText, schema);
-  } catch (error) {
     try {
       await recordAIInvocation({
         requestedModel: model,
         actualModel,
         promptHash,
         outputHash: sha256(outputText),
-        outcome: "invalid_output",
-        errorCode: error instanceof AIOutputValidationError ? "output_schema_invalid" : "output_parse_failed",
+        outcome: "succeeded",
+        errorCode: null,
         elapsedMs: Date.now() - startedAt,
         context,
       });
-    } catch (auditError) {
-      console.error("Unable to record invalid AI output", {
+    } catch (error) {
+      // Fail closed: never return unaudited model assessments. Neither
+      // candidate text nor raw model output is persisted in the audit row.
+      console.error("Unable to record successful AI invocation", {
         operation: context?.operation || "unspecified",
-        errorName: auditError instanceof Error ? auditError.name : "unknown",
+        errorName: error instanceof Error ? error.name : "unknown",
       });
+      throw new AIProviderError(
+        "The assessment result could not be recorded safely. Please retry.",
+      );
     }
 
-    if (error instanceof AIOutputValidationError) {
-      throw new AIProviderError();
-    }
-
-    throw error;
+    return parsed;
   }
 
-  try {
-    await recordAIInvocation({
-      requestedModel: model,
-      actualModel,
-      promptHash,
-      outputHash: sha256(outputText),
-      outcome: "succeeded",
-      errorCode: null,
-      elapsedMs: Date.now() - startedAt,
-      context,
-    });
-  } catch (error) {
-    // Fail closed: never return a model result that cannot be tied to an audit
-    // row. The prompt/response text itself is deliberately not persisted.
-    console.error("Unable to record successful AI invocation", {
-      operation: context?.operation || "unspecified",
-      errorName: error instanceof Error ? error.name : "unknown",
-    });
-    throw new AIProviderError(
-      "The assessment result could not be recorded safely. Please retry.",
-    );
-  }
-
-  return parsed;
+  throw new AIProviderError();
 }
