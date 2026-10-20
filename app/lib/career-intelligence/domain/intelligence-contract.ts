@@ -36,3 +36,6 @@ CANDIDATE-OWNED EVIDENCE RULES:
 - Improve clarity and structure only; do not alter ownership, scope, certainty, strength or substantive meaning.
 - Never invent evidence.
 `;
+
+/** Compatibility export for the clarification assessment prompt. */
+export { ENRICHMENT_AND_REVIEW_RULES } from "./revised-intelligence-contract";
