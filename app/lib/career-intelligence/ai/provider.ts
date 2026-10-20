@@ -243,7 +243,8 @@ export async function generateValidatedJson<T>({
 
     try {
       await recordAIInvocation({
-        requestedModel: model,
+        provider,
+        requestedModel,
         actualModel,
         promptHash,
         outputHash: sha256(outputText),
