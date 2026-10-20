@@ -1,4 +1,6 @@
 import { sql } from "@vercel/postgres";
+import type { CareerQueryClient } from "./query-client";
+import { getCareerSql } from "../db/career-sql";
 import { ObjectAccessError } from "../errors";
 
 export async function findCanonicalRole(roleTitle: string) {
@@ -20,8 +22,9 @@ export async function findCanonicalRole(roleTitle: string) {
   return result.rows[0] || null;
 }
 
-export async function findCompetency(name: string) {
-  const result = await sql`
+export async function findCompetency(name: string, client?: CareerQueryClient) {
+  const query = getCareerSql(client);
+  const result = await query`
     SELECT
       id,
       name,

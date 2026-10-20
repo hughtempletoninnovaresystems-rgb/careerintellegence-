@@ -1,0 +1,898 @@
+OpenAI pilot and reliability remediation 
+
+Revised Intelligence Contract and processing-state UX 
+
+Developer work pack revision 1.2 | 19 October 2026 
+
+Status: revised implementation specification. Current-checkout reconciliation, exact database DDL, full replacement files, deployment and runtime acceptance remain outstanding. No application changes have been made by preparing this pack. 
+
+Purpose and change from revision 1.1 
+
+Repair R08 edit/save and DEF-0009; implement the wider revised IC with explicit evidence and uncertainty records; evaluate a bounded OpenAI API pilot; introduce one reusable processing-state standard across Career Intelligence screens and future code implementations. 
+
+Revision 1.2 replaces the previous pack as the planning specification. It preserves its delivery scope and acceptance intent, adds findings from the supplied route, shared IC, clarification service, validators and provider, and defines concrete logical AI contracts. Physical storage choices remain subject to verified schema inspection. New logical field names in this pack are proposed implementation definitions, not claims about existing columns or approved deployed schemas. 
+
+Track 
+
+Required result 
+
+Enablement gate 
+
+A | R08 
+
+Whitespace repair; PostgreSQL execution and fresh-read persistence. 
+
+Save must be proven before completion. 
+
+B | DEF-0009 
+
+Coherent no-follow-up contract, bounded recovery and atomic enrichment writes. 
+
+Sufficient, insufficient, failure and retry evidence. 
+
+C | Revised IC / OpenAI 
+
+Definitions, E0–E3, holds, lineage, semantic validation and bounded provider comparison. 
+
+Contract/storage mapping, migrations if needed, then API proof. 
+
+D | Processing UX 
+
+Immediate busy state, disabled actions, meaningful messaging and reliable recovery. 
+
+Inventory and tests across all in-scope screens. 
+
+Delivery order 
+
+Capture source/schema baseline first. Tracks A, B and D may be prepared in parallel workstreams; D must cover the corrected flows. Introduce C behind explicit pilot configuration only after its storage contract and A/B integrity gates pass. A preview-only model test is separate from persisted application acceptance. A production provider switch remains a separate release decision. 
+
+Navigation 
+
+2 Sources and findings • 3 R08 • 4 DEF-0009 • 5–7 revised IC instructions • 8–9 AI contract • 10 storage • 11 provider • 12–13 UX • 14 anchors • 15–16 tests • 17 pilot/release • 18 handover and standing standard. 
+
+ 
+
+2. Source baseline and confirmed findings 
+
+Evidence basis: code supplied by Steve on 19 October, not a verified checkout or deployed commit. Inspect the actual branch before replacing any source. Preserve source uploads, original CVs, answers, R06/R07 histories and earlier test outputs. 
+
+Supplied source 
+
+Finding 
+
+Required treatment 
+
+analyse-cv/route.ts 
+
+Four AI calls: extraction, CV assessment, new-role questions and edited evidence. CV assessment returns demonstrated/clarify. 
+
+Separate evidence grades from workflow outcomes; apply common policy across these operations. 
+
+domain/intelligence-contract.ts 
+
+Three shared rule blocks; no explicit E0–E3 or hold definitions. 
+
+Replace with versioned revised policy blocks in sections 5–7; preserve provider neutrality. 
+
+services/clarification.ts 
+
+Answer prompt receives names/questions/answers, without explicit frozen definition revisions. It omits shared candidate-owned rules. 
+
+Pass exact target definitions/revisions; apply ownership rules; validate target correspondence. 
+
+Clarification gap branch 
+
+Insufficient demonstration can be persisted as contradictory and automatically accepted. 
+
+Separate evidence sufficiency from contradiction and review authority; do not rewrite historical records by inference. 
+
+ai/schemas.ts 
+
+Clarification follow-up fields accept omission/empty string but reject null; edit fields accept nullish text. 
+
+Use one explicit new outcome contract and normalise legacy-compatible forms at a documented boundary. 
+
+ai/provider.ts 
+
+GoogleGenAI, JSON MIME request, validation then one regeneration; prompt/output hashes audited. 
+
+Retain bounded attempts and audit; add exact schema-aware correction and isolated OpenAI adapter. 
+
+Clarification write path 
+
+Multiple sql writes and helpers; no enclosing transaction visible in supplied function. 
+
+Verify whole mutation atomicity with one bound transaction client and failure injection. 
+
+Unverified dependencies 
+
+Actual configured model/timeouts; parse-json implementation; current schema, indexes, triggers and privileges; no-CV and final-submission prompts; mounted UI components; operation deduplication; existing review/revision rules. Do not infer these from comments, filenames or an old migration. 
+
+Source record 
+
+CI_Intelligence_Contract_Application_Prompts_and_Planned_Changes_v1.0.docx contains the traced prompts and source comparison. The earlier evaluation copy v0.1 is not the application baseline. The complete later CI-RIC-02-EVID v1.0 prompt was not recovered; do not label newly assembled instructions as that exact tested artifact. 
+
+ 
+
+3. Track A | R08 edit/save repair 
+
+A-01 | Precise source correction 
+
+Reported failure: HTTP 500, NeonDbError syntax error at or near U+00A0; correlation ID 53f5951a-049c-49f6-bb3d-51415b3e4b03. Inspect app/api/analyse-cv/route.ts → reassessEditedCapability(), including lookup, all update branches and review-count SQL. 
+
+Replace U+00A0 used as SQL indentation with U+0020. Review the diff as lexical whitespace only. Preserve parameterisation, interpolation boundaries, SQL string values, candidate text, ownership checks and transaction semantics. Do not apply a global replacement to candidate data. Record any separate cause independently. 
+
+A-02 | Verification before deployment 
+
+Run required build/type/lint checks. Record changed SQL blocks and scan each branch for remaining non-breaking indentation. 
+
+Execute the actual handler against an isolated authorised PostgreSQL environment. Cover lookup, materially different reassessment updates and review-count execution. 
+
+Use a candidate-text parameter containing U+00A0 and verify that it survives unchanged. A syntax fix must not alter source evidence. 
+
+Test failed and repeated saves for partial updates and duplicate effects. Preserve lifecycle/review semantics. 
+
+Verify saved capability/role IDs, edited fields, evaluated revision and review state through independent database and application reads. 
+
+A-03 | Deployment and mandatory sequence 
+
+Record deployed build/commit, environment and time. Revisit the preserved R08 edit using its actual identifiers, save it and capture the response and correlation ID. Then perform a fresh server/database read and reopen/reload the role. Do not rely on optimistic UI state or cached objects. Only after this evidence passes may role completion be tested. 
+
+Closure and UX 
+
+A successful HTTP response alone is insufficient. Supply source diff, PostgreSQL branch results, deployed build, fresh read and UI persistence observation. Apply Track D to saving and completion; no success message before persistence is established. Do not manually update the database or relax completion gates to manufacture a pass. 
+
+Schema position 
+
+The reported SQL indentation fix requires no DDL. Revised-IC storage requirements remain separately in Track C. Failure to deploy either track must not be disguised as a provider problem. 
+
+ 
+
+4. Track B | Clarification-output reliability 
+
+DEF-0009 reports invalid output at evaluations.0.followUpQuestion and evaluations.0.followUpReason, attempt 1, with no answer row written. Preserve that failure evidence. Null rejection is consistent with the supplied schema, but the raw failing response and parser path are needed to establish the exact mismatch. 
+
+Work item 
+
+Implementation requirement 
+
+WP4-01 
+
+Trace prompt → provider response → parser/normaliser → Zod validation → writes. Record actual mismatch and deployed source version. 
+
+WP4-02 
+
+Use required nullable follow-up fields: both null for resolved; substantive strings when follow-up is required; other outcomes follow C-S05. Update prompt, types and validators together. 
+
+WP4-03 
+
+Sufficient originating evidence resolves that question without fabricated follow-up. Insufficient meaningful evidence produces a focused question and reason; still scan emerging signals independently. 
+
+WP4-04 
+
+Normalise only contract-equivalent representations. Preserve evidence, status and meaning. No invented question, evidence or outcome upgrade to satisfy validation. 
+
+WP4-05 
+
+Validate the complete intended mutation before domain writes; commit answers, capability changes, provenance, questions and gate/lifecycle changes atomically. 
+
+WP4-06 
+
+Maximum two generation attempts, as in the supplied provider: initial plus one schema-aware correction. Exhaustion gives a controlled recoverable processing error. 
+
+WP4-07 
+
+Safe logs: operation, error category, field paths, attempt, provider/model and correlation/operation IDs. Keep raw evidence and secrets out of general logs. 
+
+WP4-08 
+
+Regression cases: no follow-up, required follow-up, second round, emerging signals, malformed/null/missing values, exhaustion, no partial writes and duplicate-safe recovery. 
+
+Compatibility and semantic corrections 
+
+Track B may ship before the E0–E3 contract. In that case retain legacy outcome names, apply the nullable follow-up rule and update Evaluation types consistently; do not claim E0–E3 delivery. Inspect every consumer before choosing the compatibility mapping. A required clarification question and reason must not be replaced by the generic fallback “Further evidence is required.” 
+
+Do not map the legacy gap outcome automatically to contradictory evidence. A lack of demonstration is not necessarily a contradiction or lack of competence. New review acceptance must follow a documented authorisation rule; it must not arise solely because the model stopped asking questions. 
+
+Runtime closure 
+
+Capture correct answer/question/role links in EVID-3B and question/capability/lifecycle evidence in EVID-2C3A. Cover sufficient, insufficient and emerging cases separately. Inject failure after intermediate writes and prove rollback. Typed answers survive failure; safe retry creates one committed logical operation. Static checks cannot close DEF-0009. 
+
+ 
+
+5. Track C | Revised shared identity instructions 
+
+Instruction design reference: CI-IC-REV-12-DRAFT. Proposed consolidated implementation wording for this revision; not the verbatim CI-RIC-02 test bundle. Version and review it as a new bundle. Store shared policy outside provider adapters. Use the following identity block in discovery and any authorised identity reconciliation. 
+
+A capability is an underlying ability that can reasonably be assessed and recorded independently. Confine discovery to the occupational territory represented by the supplied source; do not target a capability count or generate an exhaustive occupational ontology. 
+
+For every material expression, define the substantive action or judgement and its object or purpose. Identify constituent abilities before the counterfactual: could a credible person sufficiently demonstrate one constituent while legitimately having weaker or no evidence for another? If yes, presume separate identities, subject to subsumption. 
+
+Subsumption is justified only where separation would distinguish methods, techniques, tools, technologies, procedural steps, contexts or manifestations of the same underlying ability. Name that shared ability. Common workflow, occupation, outcome or performer does not settle identity. Applying a method and interpreting information may require separate abilities. 
+
+Setting, seniority, supervision, autonomy, delegated authority, responsibility, complexity and scale are attributes unless they materially change the underlying ability. Routine or informal activity is not automatically a separate identity, and low complexity does not disqualify an independently assessable ability. 
+
+Assist, support and participate do not by themselves define an ability. Do not invent the missing personal action. A defensible identity may exist while a source association or the candidate’s contribution remains unclear. Keep occupational identity, source meaning, personal contribution and historical-role attribution as distinct decisions. 
+
+If source meaning is unsettled, preserve the exact wording/location, competing meanings and possible associations as an unresolved source signal. If the occupational boundary is unsettled, preserve alternatives as an identity governance item. Missing candidate detail alone is not an occupational governance problem. Keep both records where both issues exist. 
+
+Record decisions as accept provisional identity, split, subsume under a named ability, or refer for governance review. Include constituent comparison, subsumption result, references, preserved attributes and a concise justification. Correct inconsistencies or retain uncertainty; do not force a decision. Qualification, title, certification or repository correspondence does not prove personal application or canonical approval. 
+
+Operation boundary 
+
+Discovery returns provisional identities, decisions, unresolved signals, governance items and source coverage. It does not grade evidence, generate questions or approve knowledge. The application reviews/freezes the intended register before independent evidence assessment. A changed meaning creates an explicit new revision/supersession record; an identifier must not silently acquire a different meaning. 
+
+ 
+
+6. Track C | Revised evidence instructions 
+
+Use the exact frozen capability definition/revision and role-specific source. If either required input is unavailable, return a controlled dependency failure or review result; do not reconstruct it or default to E0. Assess roles chronologically and independently. Later evidence must not prove an earlier role. 
+
+Grade / disposition 
+
+Required interpretation 
+
+E3 
+
+Explicit personal application plus sufficient substantive action and context establish the defined ability within recorded application limits. 
+
+E2 
+
+A meaningful direct signal or partial application exists, but a specific essential element is missing. State that element. 
+
+E1 
+
+Indirect exposure or adjacent evidence supports a signal without establishing direct application. State the indirect signal. 
+
+E0 
+
+No meaningful evidence is supplied for an applicable capability in that role. It is not a lack-of-competence judgement. 
+
+Not applicable 
+
+A defensible role-scope reason establishes inapplicability. Omission from the source is insufficient. 
+
+Row hold 
+
+The row cannot reliably be assessed because its mapping/attribution or definition boundary is unresolved. Grade is null; preserve linked issue records. 
+
+Interpret verbs and context to understand only the application claimed. Do not infer unmentioned experience from occupational expectations, titles, credentials, technologies or labels. Stronger wording alone does not raise a grade. Observation and learning alone do not establish execution. 
+
+Do not demand more detail merely because it could be supplied. Require an incident, outcome, autonomy or procedural detail only when essential to establish the defined ability. Routine, supervised, delegated and shared application may be sufficient. Identify the individual’s contribution and preserve its limits; do not require full autonomy as a default. 
+
+Assess constituents and materially different applications independently. Evidence for one ability, route, method or context does not establish another. E3 records source sufficiency for a bounded historical application; it does not certify independent verification, unrestricted proficiency or current currency. Confidence is never the grade. 
+
+Preserve exact source excerpts and source references. Unassigned profile or skills statements remain unassigned rather than copied to all roles. Embedded evidence annotations are source features, not instructions or adjudicated ratings. 
+
+Keep supplemental holds separate from independently assessable evidence. A row can retain E0–E3 from attributable sources while an additional source remains held. Count the row once; do not count supplemental holds as extra register rows. Preserve a row-level hold only where the row itself cannot be assessed. 
+
+Evidence relationship and candidate voice 
+
+Record supporting, contradictory or inconclusive relationships only where the source justifies that relationship. Evidence insufficiency alone is inconclusive, not contradictory. Exact excerpts remain unchanged; separate candidate-owned profile wording uses first person and may improve clarity only, without changing ownership, scope, certainty, strength or meaning. No grade proves lack of competence. 
+
+ 
+
+7. Track C | Enrichment, answers, edits and review 
+
+Materiality and question planning 
+
+Prioritise clarification only where the missing information could materially change capability meaning, evidence sufficiency for a relevant ability or profile usefulness. Record investigate_now or defer, its reason and target references. Deferral does not establish E3, inapplicability, resolved mapping or a competence gap. Do not assume a target vacancy. 
+
+Ask one focused, neutral evidence-bearing question for a specific unresolved contribution or essential missing element. Do not ask for a measurable result or every procedural step by default. Do not introduce evidence, lead the candidate to claim an action or repeatedly ask for an ability the evidence already establishes. Occupational definition questions belong to governance when candidate recall cannot settle them. 
+
+Answer evaluation 
+
+Validate the originating question, role, target identity and definition revision. Evaluate each supplied question independently. A shared episode may support multiple abilities only through independent assessments. Sufficient evidence resolves the originating question without an artificial follow-up; insufficient evidence gets a meaningful question and reason only where further clarification is useful and material. 
+
+Always scan the answer for additional independent capability signals, even when the originating question is resolved. Reconcile identities and duplicates before writes. Do not stage a new signal as demonstrated without an independent sufficient assessment. If an existing identity already exists, retain the new source contribution rather than silently dropping it. 
+
+Edits and profile approval 
+
+Treat candidate edits as new intelligence. Reassess the edited capability/evidence against the exact definition revision; do not inherit the previous outcome. Preserve earlier evidence and evaluations as history. If meaning changes, return an explicit identity-change proposal and review dependency rather than silently renaming a canonical identity. 
+
+Use first-person wording for candidate-owned evidence, including answer and emerging-capability paths. Preserve exact source excerpts separately. Candidate approval confirms the candidate’s account; it does not independently verify competence or automatically approve an occupational identity. 
+
+Completion and holds 
+
+Define the product’s completion eligibility using evidence disposition, unresolved issues and review authorisation separately. Until an explicit reviewed rule permits otherwise, unresolved material row holds or missing required decisions block promotion; return a reviewable explanation. Do not convert holds to gaps to pass a gate. Current snapshots do not establish this full eligibility policy; include the signed-off rule in the implementation payload. 
+
+Invalid model output, refusal, timeout and unavailable dependencies are processing outcomes, not evidence grades. Retain user input and historical state. No provider error may downgrade a candidate, settle a hold or manufacture a completed role. 
+
+ 
+
+8. AI response contract | Core records 
+
+Proposed logical contract CI-AI-12 v0.1. Translate these definitions into explicit versioned TypeScript/Zod and provider-compatible JSON schemas. Retain old/new version readers; do not squeeze new meanings into legacy status. Required fields are required even when their value is null; do not default missing assessments to E0 or missing arrays to a successful empty result. 
+
+Record 
+
+Required fields and types 
+
+Envelope 
+
+contractVersion: "CI-AI-12-v0.1"; operation: extraction|identity|initial_evidence|question_planning|clarification|edit|final_submission; runReference: string; identities[], decisions[], assessments[], unresolvedSignals[], governanceItems[], priorities[], followUps[], sourceCoverage[]: typed arrays. Server validates context/approved input revision. 
+
+Identity 
+
+identityRef, definitionRevision, name, definition: non-empty strings; decisionRefs: string[]; attributes: array of {kind, value}; supersedesRef: string|null. Provisional refs are not canonical approvals. 
+
+Decision 
+
+decisionRef, exactExpression, sourceRef: strings; constituentDefinitions: string[]; counterfactual: yes|no|not_required|ambiguous; subsumption: independent|same_ability|method|tool|context|step|ambiguous; decision: accept|split|subsume|governance; resultingIdentityRefs: string[]; justification: non-empty string. 
+
+Assessment 
+
+assessmentRef, roleRef, identityRef, definitionRevision: strings; disposition: assessed|hold|not_applicable; evidenceGrade: E0|E1|E2|E3|null; sourceRefs: string[]; personalApplication, justification, applicationLimits: strings; missingElement: string|null; holdRefs: string[]; sourceRelationships: array of {sourceRef, relationship: supporting|contradictory|inconclusive}. 
+
+Unresolved signal 
+
+signalRef, exactWording, sourceRef, reason: strings; roleRef: string|null; uncertainty: source_mapping|role_attribution|personal_contribution|definition_scope; alternatives: string[]; possibleIdentityRefs: string[]; proposedAction: candidate_clarification|governance_review|defer. 
+
+Governance item 
+
+governanceRef, expression, reason, decisionNeeded: strings; sourceRefs: string[]; alternativeDefinitions: string[]; affectedIdentityRefs: string[]. No evidenceGrade. 
+
+Priority 
+
+priorityRef, targetRef: strings; treatment: investigate_now|defer; materialityReason: non-empty string. 
+
+Follow-up 
+
+targetQuestionRef, roleRef, identityRef, definitionRevision: strings; outcome: resolved|follow_up_required|closed_unresolved|review_hold; question, reason: string|null; assessmentRefs, emergingIdentityRefs: string[]. 
+
+Source coverage 
+
+sourceRef: string; disposition: represented|context_only|unresolved; decisionRefs, signalRefs, governanceRefs: string[]; reason: string. Every substantive source expression has a recorded disposition. 
+
+Output limits and server-owned identity 
+
+Select documented, tested length/array bounds for each operation, preserve long-source pagination/truncation metadata, and reject silent loss. Use existing bounds as a starting point, not proof of occupational completeness. The model may propose run-local references; the server allocates persistent IDs and validates all reference links. Never accept provider-supplied owner or candidate IDs as authorisation. 
+
+ 
+
+9. AI response contract | Invariants and mappings 
+
+Rule 
+
+Required validation 
+
+C-S01 Grade/disposition 
+
+assessed requires exactly one E0–E3 grade. hold and not_applicable require grade=null. A hold needs an existing issue reference; not_applicable needs a substantive scope reason. 
+
+C-S02 Sufficiency 
+
+E3 needs non-empty attributable source support, personal application and bounded limits. E2 needs a specific missingElement. E1 needs an identified indirect signal. E0 must not claim unsupported positive evidence. 
+
+C-S03 Definition integrity 
+
+Every assessment identity/revision exists in the frozen input register. No rename/split/merge during evidence-only operations. Material new boundaries return governance issues. 
+
+C-S04 References and coverage 
+
+No duplicate IDs, unknown question targets, cross-role/candidate references or missing required results. SourceRefs resolve to retained source/version/locator records. Coverage is checked against the operation’s required input rows. 
+
+C-S05 Follow-up 
+
+resolved: question=null and reason=null; follow_up_required: both trimmed non-empty; closed_unresolved/review_hold: question=null and reason non-empty. Define these union branches in runtime validation. 
+
+C-S06 Holds and counts 
+
+A supplemental hold does not erase a grade from independently attributable evidence. Reconcile assessed + held + not-applicable rows to the expected register rows; issue records are counted separately. 
+
+C-S07 Emerging intelligence 
+
+Every emerging identity is independently reconciled; every assessed emerging application uses the same threshold. No forced E3, duplicate staging, unsupported decomposition or lost evidence contribution. 
+
+C-S08 Review and failure 
+
+Neither provider confidence nor candidate approval resolves identity governance. Invalid output results in no domain mutation and cannot be normalised into a lower grade. 
+
+Legacy compatibility rules 
+
+Do not infer E0–E3 from demonstrated/clarify/gap or confidence. Retain legacy records as ungraded/unknown with their original status until a separately authorised reassessment exists. New evidence grades and follow-up outcomes are separate fields. Compatibility projections must preserve hold/review state and never present closed_unresolved as lack of competence. 
+
+A resolved follow-up can close its originating evidence question; it does not automatically approve a provisional identity or authorise profile promotion. closed_unresolved records a bounded stop to questioning without claiming a grade or workflow acceptance the evidence does not support. 
+
+Required operation-specific schemas 
+
+Deliver separate extraction/identity, initial evidence, priority/question planning, clarification, edit and final-submission schemas. The envelope lists shared record definitions, not permission for every stage to create every record. Evidence-only operations must reject identity mutations; question planning must not regrade evidence; final submission must not invent or silently approve capabilities. 
+
+Semantic correctness remains an evaluation task 
+
+Structural validation proves shape and consistency, not occupational truth. Tests must examine assigned definition, exact support, contribution and limits. Use concise auditable decision outcomes; do not request hidden private reasoning. Archive prompt/schema/example versions and raw test outputs in controlled evidence storage. 
+
+ 
+
+10. Database contract and migration decisions 
+
+Database change requirements are in scope, but exact DDL is not yet verified. Obtain a fresh metadata export from the intended branch: tables, columns, types/defaults/nullability, checks, keys, indexes, triggers, grants/RLS and migration history. Compare it with the checked-out and deployed code. 
+
+Meaning to persist 
+
+Required mapping decision / acceptance 
+
+Identity and revision 
+
+Map provisional/canonical refs, definition revisions, attributes, decisions and supersession. Stable identity must not conceal changed meaning. 
+
+Role assessment 
+
+Map role and definition revision to grade/disposition, justification, application limits and evaluated source versions. Grade must be independent of confidence and workflow status. 
+
+Held/unassigned sources 
+
+Retain exact source, alternatives, known/unassigned role, possible associations, hold reason and history. Hold is distinct from no evidence and competence gap. 
+
+Governance and priority 
+
+Store identity alternatives, required decision and outcome; investigate/defer reason. Candidate approval cannot silently settle these. 
+
+Source contribution 
+
+Retain CV/version/hash/locator and question/answer links; support several sources per assessment and several independent assessments per answer. 
+
+Review and promotion 
+
+Preserve review decision/reviewer/time, assessed revision and promotion source/version links. Reject stale review or completion. 
+
+Policy and audit 
+
+Record contract/schema/example version, provider/requested and actual model, source revision, operation and evaluated output reference/hash. 
+
+Operation recovery 
+
+Persist or reuse a reliable operation/request identity, payload revision/hash and committed result/status so retries and timeout reconciliation are safe. 
+
+Migration payload required before persisted pilot enablement 
+
+For every row, return the actual table/column or validated versioned JSON path, suitability evidence and consumer changes. A generic JSON column alone is not proof. If insufficient, supply complete additive DDL, constraints, foreign keys, indexes, privileges/RLS changes, mixed-version readers, deployment ordering and rollback/forward-recovery procedure. Do not invent physical names from this logical design. 
+
+Verify whether the earlier provenance structures and CR-001 signal status/default migration exist. Reuse suitable structures without duplicate lineage. Preserve unknown historical grades/lineage; no inferred backfill from names or confidence. Rehearse fresh install, upgrade, failure and rollback on an isolated PostgreSQL branch, including mixed historical/new reads. 
+
+Atomicity and concurrency 
+
+Run model work before opening a long database transaction. At commit, recheck ownership, question availability and expected revisions, then write the complete mutation through one bound transaction client. Abort every related domain write on failure. Invocation audit rows may record failed attempts independently; their existence is not a partial candidate assessment. Enforce duplicate/stale-operation protections at the server, not only in the UI. 
+
+ 
+
+11. Provider adapter, retry and observability 
+
+C-P01 | Provider-neutral policy 
+
+Keep shared IC rules, semantic validators and candidate ownership outside adapters. OpenAI enablement uses explicit configuration and does not change the production default merely because code deploys. Verify supported API model ID, reasoning settings, SDK/API version and structured-output compatibility at implementation time. A ChatGPT model label is not an API manifest. 
+
+C-P02 | Generation and validation 
+
+Use provider-native schema-constrained output where supported, followed by server structural and semantic validation. Treat refusal, incomplete response, timeout, transport failure and invalid output separately. The supplied Gemini adapter requests JSON MIME only; that is not evidence that its output is schema-constrained. 
+
+Retain at most two generation attempts for recognised invalid JSON/schema output: initial plus one correction. Send the same evidence and a schema-aware correction identifying the invalid fields and the actual expected representation. Do not instruct all optional/no-follow-up fields to be non-empty. Do not change evidence or grade to repair a shape error. Record attempt-specific hashes and outcomes. 
+
+C-P03 | Timeout and recovery 
+
+Inspect withTimeout and parse-json before implementation. Promise timeout alone does not demonstrate cancellation of provider work. Define provider request timeout and operation-state reconciliation separately. If no domain commit occurred, retry may proceed safely under the same logical operation protection. If completion is uncertain, query/reconcile committed state before permitting a new mutation. 
+
+C-P04 | Audit and privacy 
+
+Retain fail-closed invocation auditing. Add or map correlation ID, logical operation ID, attempt and bundle versions where needed. Confirm whether actual model version is available. Never retrieve or expose server credentials in packs or logs. Keep raw evidence and model output out of general diagnostics; retain controlled pilot evidence under existing access and retention rules. 
+
+Review field semantics and output limits 
+
+Check parser transformations and Zod defaults/coercion so malformed, omitted or out-of-range values cannot masquerade as valid assessments. Verify type compatibility for required null follow-up fields across provider schemas, runtime types and consumers. Bounded retry is recovery, not a substitute for a coherent contract. 
+
+Observations to return 
+
+Record usage/cost where the provider supplies it, elapsed latency, retry/failure counts and outcomes under the exact configuration. Agree operational limits before wider enablement. The pack does not assert a measured speed/cost benefit or a general accuracy estimate. 
+
+ 
+
+12. Track D | Processing-state UX standard 
+
+Standing rule CI-UX-001: Every user-triggered processing action must immediately acknowledge the action, prevent duplicate/conflicting actions, communicate its processing state, and provide a clear success or recoverable failure outcome without losing user input. Apply this to existing in-scope screens and every future code implementation. 
+
+D-01 | Shared state ownership 
+
+Implement one reusable action-processing mechanism and shared busy-button pattern. On invocation, set the active screen’s operation state synchronously before awaiting work; lock its action buttons and conflicting navigation. Do not rely only on a spinner or a delayed render to stop double clicks. Cover keyboard submission and programmatic form submission as well. 
+
+The server must independently protect mutations against duplicate/replayed requests. State is scoped to the operation and affected screen; do not attempt to disable browser controls or unrelated screens. Preserve input and submitted revision. Any supported cancellation must be a distinct safe control, not an unguarded second mutation. 
+
+State 
+
+Visual/interaction behaviour 
+
+Exit condition 
+
+Ready 
+
+Normal labels and permitted actions. 
+
+Invoke one action. 
+
+Processing 
+
+Disable screen action buttons; busy label/spinner and persistent relevant message. Prevent conflicting edits/navigation. 
+
+Confirmed result, known failure or uncertain timeout. 
+
+Checking result 
+
+Keep conflicting mutations disabled; explain that the result is being checked. Permit a safe status check where supported. 
+
+Server confirms committed success or known non-commit. 
+
+Succeeded 
+
+Show confirmed result, refresh authoritative state and restore permitted controls. 
+
+New view/state ready. 
+
+Recoverable failure 
+
+Preserve typed content; explain failure, show retry or next action and restore appropriate controls. 
+
+Retry is safe after known failure/non-commit. 
+
+D-02 | End-state discipline 
+
+Use a single owner for setting and clearing busy state; ensure every success/error branch reaches a defined outcome. A try/finally pattern may release local resources, but must not blindly unlock a conflicting mutation when server completion is unknown. Do not leave controls disabled indefinitely: provide bounded reconciliation, a visible problem state and a recovery route. 
+
+D-03 | Completion confirmation 
+
+For Complete role, keep processing visible through validation, persistence and completion result. Show success only when the server confirms the committed outcome. Read back authoritative lifecycle/profile state as required; a cleared spinner or optimistic UI update is not proof of completion. 
+
+ 
+
+13. Track D | Messages, accessibility and inventory 
+
+Action 
+
+Busy button label 
+
+Processing message 
+
+Upload CV 
+
+Processing CV… 
+
+Reading your CV and identifying your career history… 
+
+Assess role 
+
+Assessing role… 
+
+Assessing the information provided for this role… 
+
+Submit answers 
+
+Recording responses… 
+
+Assessing and recording your responses… 
+
+Save edit 
+
+Saving changes… 
+
+Checking and recording your changes… 
+
+Complete role 
+
+Completing role… 
+
+Compiling and recording your responses for this role… 
+
+Result uncertain 
+
+Checking result… 
+
+This is taking longer than expected. We’re checking whether your changes were recorded. Please avoid submitting again. 
+
+Messages describe actual work, not unverified stages. Use a generic processing message for short operations; use relevant text for operations that could appear idle. Do not invent progress percentages or time estimates. Preserve the role-completion wording above unless a product change is explicitly agreed. 
+
+Accessibility and layout 
+
+Place a small animated icon within the action button when useful. Retain a readable text label; animation alone is insufficient. 
+
+Announce processing/result status through an appropriate polite live region and mark the affected region busy. Disable native buttons correctly; custom controls must block activation as well as communicate disabled state. 
+
+Keep the message visible and maintain accessible focus through completion/error. Do not move focus repeatedly or trap keyboard users. Explain the busy state rather than leaving a screen of unexplained disabled controls. 
+
+Respect reduced-motion preferences and provide a static indicator alternative. Reserve icon/label space to avoid disruptive button or layout movement. 
+
+Recoverable errors preserve typed answers/edits, provide a safe recovery action and include a useful correlation reference without technical internals or candidate data. 
+
+Screen/action inventory required 
+
+Locate the mounted UI, then return a table of screen, action, handler, affected region, lock scope, busy text, success/failure/timeout behaviour and test reference. Cover CV and no-CV routes, role/context saves, assessments, clarification rounds, review accept/edit/remove/add actions, final submission and role completion. Inventory any additional user processing actions rather than assuming the list is exhaustive. 
+
+Future code standard 
+
+Use the shared processing mechanism for new actions. A pull request adding a processing action must include its state transitions, message and duplicate/recovery handling. Add CI-UX-001 to the maintained implementation instructions and review checklist; reference it in future code-generation prompts and work packs. User agreement establishes the requirement; repository adoption remains a deliverable. 
+
+ 
+
+14. Implementation anchors and replacement rules 
+
+Paths below are supported by the supplied imports/source except where explicitly labelled unresolved. They are inspection anchors, not complete before-block replacement instructions. Return exact current symbols and before-hashes before applying patches. 
+
+Source anchor 
+
+Change and required evidence 
+
+app/lib/career-intelligence/domain/intelligence-contract.ts 
+CAPABILITY_IDENTITY_RULES; EVIDENCE_ASSESSMENT_RULES; CANDIDATE_OWNED_EVIDENCE_RULES 
+
+Introduce versioned revised policy and stage boundaries from sections 5–7. Freeze prompt examples separately from candidate evidence. 
+
+app/api/analyse-cv/route.ts 
+extractCareerHistory; assessCVCapabilitySignals; generateQuestionsForNewRole 
+
+Separate discovery/frozen definitions/evidence stages. Pass exact role/source and definition revisions; preserve source text vs candidate wording; introduce operation-specific contract mappings. 
+
+Same route 
+reassessEditedCapability 
+
+Repair all SQL indentation branches. Reassess edited revision; preserve historical evidence; return explicit identity change/hold records and updated contract. 
+
+app/lib/career-intelligence/services/clarification.ts 
+evaluateAnswers; assessRoleClarifications; findMatchingCapability 
+
+Pass frozen target definitions, apply candidate voice, enforce follow-up union, retain evidence against existing identities, correct gap/contradiction mapping and implement atomic/stale-safe mutation. 
+
+app/lib/career-intelligence/ai/schemas.ts 
+evaluationSchema/evaluationListSchema; cvCapabilitySignalAssessmentSchema; editedCapabilityReassessmentSchema; other operation schemas 
+
+Implement explicit versioned contract types and invariants; align nullable fields and required outputs. Test missing values and semantic validation. 
+
+app/lib/career-intelligence/ai/provider.ts 
+generateValidatedJson; recordAIInvocation; withTimeout 
+
+Isolate OpenAI adapter/flag, use supported schema output, schema-aware bounded retry, per-attempt audit and reliable error/reconciliation states. 
+
+ai/parse-json; config; types; staging; provenance; role-submission; role-lifecycle; role-snapshot 
+
+Resolve exact exported symbols in current checkout. Verify parser transformations, consumers, transaction binding, mixed-version reads and review/lineage guards. 
+
+Mounted UI: unresolved 
+Earlier candidates: app/ui/dashboard/cvupload.tsx or components/CareerIntelligenceJourney.tsx 
+
+Locate actual mounted handlers/components before edits. Implement shared processing state, all-screen action inventory, busy messages and recovery. Add candidate advisory at real answer/review locations. 
+
+Payload discipline 
+
+For each change supply current path/symbol, complete before-block with adjacent text, before-hash, complete replacement including imports/types, full changed files, review diff and test references. Stop an automated replacement if the before-block differs. Do not treat old CR-001/provenance paths or line numbers as verified current source. 
+
+ 
+
+15. Semantic and contract acceptance tests 
+
+Test data must be independently reviewed. Keep expected ratings and controller answers outside the prompts. A correct label with a wrong definition or unsupported justification fails. Do not enforce a capability count or assume zero E3 is correct. 
+
+Test ID 
+
+Fixture / required result 
+
+IC-01 Independent abilities 
+
+A compound with separable abilities is split with independent definitions; common workflow does not force a merger. 
+
+IC-02 Subsumption 
+
+Tool/method/context variation expressing the same ability remains an attribute; explain the shared ability. Distinct interpretation/judgement is evaluated independently. 
+
+IC-03 Definition control 
+
+Evidence-only call preserves exact refs/definitions. Missing/stale definition is a controlled dependency/review outcome, not E0 or silent reconstruction. 
+
+IC-04 Threshold 
+
+Use reviewed E3/E2/E1/E0 controls; test substantive supervised/shared execution, direct-but-missing-essential detail, adjacent exposure and no meaningful role evidence. 
+
+IC-05 Role isolation 
+
+No transfer of later-role or unassigned-profile evidence into an earlier role. Credentials/labels alone do not prove execution. 
+
+IC-06 Holds 
+
+Row-level ambiguity has null grade; supplemental hold can coexist with a separately supported row grade. Counts reconcile without duplicate rows. 
+
+IC-07 Materiality 
+
+Ask only where a specific missing fact could change meaning, sufficiency or usefulness. Defer without upgrading grade or settling governance. 
+
+IC-08 Answer/emerging 
+
+Sufficient answer resolves origin with null follow-up; independent emerging scan still runs. Existing identities receive new source contribution without duplicate staging. 
+
+IC-09 Edit/review 
+
+Edit does not inherit prior grade; old evaluation remains traceable. Changed definition needs versioned governance. Candidate approval does not certify competence. 
+
+IC-10 Schema failures 
+
+Malformed JSON; omitted required records; null/string union failures; wrong target refs; duplicate/missing results; refusal/incomplete response; retry exhaustion. No domain mutation. 
+
+IC-11 Evidence relationship 
+
+Insufficient source is not automatically contradictory; grade, workflow outcome, source relationship and review decision remain separate. 
+
+IC-12 Historical compatibility 
+
+Legacy grade/lineage stays unknown where unestablished. Mixed old/new reads are safe; no inferred backfill. 
+
+Existing six-case evidence controls 
+
+Retain the unchanged C01–C06 fixtures. Controller expectation: E3, E3, E3, E2, E1, E0. Check the assigned definition, personal action and limits as well as the grade. Source table and full fixtures must be attached to the implementation test bundle; the ratings above are controller material, not model input. 
+
+ 
+
+16. Runtime, integrity and UX acceptance tests 
+
+Test ID 
+
+Required runtime evidence 
+
+RT-A01 R08 
+
+Actual PostgreSQL handler branches, candidate U+00A0 preservation, deployed save, independent fresh read, reopen and completion sequence. 
+
+RT-B01 Sufficient 
+
+Preserved failing answer validates with no artificial follow-up; correct role/question/answer and originating signal resolution; emerging scan still exercised. 
+
+RT-B02 Follow-up 
+
+Deliberately insufficient meaningful answer produces substantive question/reason; second-round enrichment preserves history and unresolved state. 
+
+RT-B03 Atomic failure 
+
+Inject failure after question update, answer insert, capability/provenance write and before gate/lifecycle completion; all related domain changes roll back. 
+
+RT-B04 Concurrency 
+
+Double click, keyboard repeat, concurrent tab and replayed request produce one committed logical mutation or a coherent conflict. Stale question/review fails without partial writes. 
+
+RT-C01 Storage 
+
+Save/reload grades, definitions, decisions, holds and lineage; mixed legacy/new reads; migration install/upgrade/failure/rollback on isolated branch. 
+
+UX-01 Immediate lock 
+
+Every inventoried processing action immediately disables active-screen action buttons and conflicting navigation. Spinner/text appear before waiting for network. 
+
+UX-02 Duration/success 
+
+Simulate slow upload, answer, edit and completion. Message persists through processing; success only follows confirmed committed result. 
+
+UX-03 Known failure 
+
+Validation/transport/server failure preserves typed input; clear error and safe retry; controls restored only when appropriate. 
+
+UX-04 Unknown result 
+
+Simulate timeout after server commit and before response. UI checks operation state, avoids second mutation and reaches confirmed success or safe non-commit recovery. 
+
+UX-05 Accessibility 
+
+Keyboard and assistive status announcements, busy/disabled semantics, focus recovery, reduced motion and stable button layout pass. 
+
+UX-06 Coverage 
+
+CV/no-CV and all inventory actions use the shared mechanism; no handler bypasses lock/recovery, including error branches and repeat submits. 
+
+Evidence return 
+
+Record run, fixture/source hash, build/commit, model/bundle versions, affected IDs, operation/correlation IDs, request/response outcome and fresh-state evidence. Screenshots demonstrate visual state but not database integrity. Use controlled failure injection and retain original failure history. Pass only when all applicable conditions are evidenced; otherwise record fail, blocked or inconclusive with a concrete next action. 
+
+ 
+
+17. Bounded pilot, enablement and rollback 
+
+Pilot design 
+
+Use the same R09 Apprentice/Gas Technician CV bytes and frozen source bundle for matched CV-only comparisons. Do not introduce R06/R07 answers or earlier provider outputs. Preserve existing and revised bundles separately, including policy, examples, schema, semantic mappings and adapter configuration. 
+
+Where feasible, compare the same provider under old/new IC to examine contract effects, then the same revised IC across providers to examine provider effects. If only one combined comparison is possible, report confounding explicitly. Chat results do not establish API/application performance; repeated calls do not teach the contract to the provider. 
+
+Acceptance and operational limits 
+
+Run the unchanged evidence controls through the actual API and examine definition alignment, grades, source support and limits. 
+
+Review R09 identities/mappings for rule consistency and source preservation; require neither a fixed count nor a fixed E3 distribution. 
+
+Prove A/B persistence/integrity and D visual recovery independently of provider preference. No observation upgraded to execution or supervision penalised solely for supervision. 
+
+Record latency, usage/cost where available and retry/failure rate under verified settings. Agree limits before widening scope; do not invent thresholds or claim measured values. 
+
+Retain mismatches, unresolved boundaries and residual issues with owner/next action. One bounded acceptance cycle ends in enable, revise or retain current default, rather than indefinite unchanged chat reruns. 
+
+Release gates 
+
+Gate 0: source/deployed commit and fresh schema reconciled. Gate 1: A/B pass. Gate 2: revised contract, storage mapping/migrations and mixed-version readers reviewed. Gate 3: semantic and integrated tests pass, including D inventory. Gate 4: configured API pilot reviewed and rollback rehearsed. Enable only explicitly authorised scope. A default provider change is not automatic. 
+
+Rollback and preservation 
+
+Record prior deployment/configuration, flags, migrations and disable path. Reliability fixes may release independently after their own tests. Disable revised writes/pilot if integrity or completion regresses; retain old/new schema readers so new records remain readable. Prefer additive rollback/forward recovery over destructive removal of populated fields. Do not delete assessment history, reset failures or manually reconcile candidate data to manufacture acceptance. 
+
+Completion policy dependency 
+
+Return the exact reviewed eligibility matrix for grades, holds, governance and candidate review. Until settled, keep ambiguous persisted pilot outcomes reviewable and block unsafe promotion. The pilot does not promise perfect fairness, full occupational coverage or canonical approval. 
+
+ 
+
+18. Handover, traceability and future standard 
+
+Developer return checklist 
+
+Current/deployed commit IDs, branch/environment, source hashes, changed files and review diff; full before/after replacements at all anchors. 
+
+Frozen complete prompt files for all affected stages, reviewed examples, versioned schemas/types, semantic validators and operation-specific mappings. No unresolved “apply revised rules” placeholders. 
+
+Actual database mapping for every logical meaning; complete required DDL/constraints/indexes/grants/RLS, mixed-version read/write changes and rehearsal/rollback evidence. 
+
+Shared processing-state mechanism and busy-button component; complete screen/action inventory, messages, accessibility checks and future implementation instruction update. 
+
+A/B closure evidence, semantic controls, migration tests, runtime failure/concurrency tests, UI recovery evidence and configured OpenAI pilot measurements. 
+
+Release/disable instructions, completion eligibility matrix and residual issues with owner/next action. Distinguish specified, implemented, tested, deployed and verified. 
+
+Standing instruction to add to future implementation guidance 
+
+CI-UX-001 — For every user-triggered processing action, use the shared processing-state mechanism. Acknowledge immediately; disable active-screen action buttons and conflicting navigation; show relevant busy text and an accessible indicator; prevent duplicate/conflicting server mutations; preserve user input; confirm success from committed server state; and provide safe error/timeout reconciliation. Every state path must reach a visible recoverable or completed outcome. Include these behaviours in acceptance checks for every new processing action. 
+
+Requirements traceability 
+
+Requirement group 
+
+Implementation / acceptance locations 
+
+R08 lexical repair and persistence 
+
+Section 3; route reassessment anchor; RT-A01. 
+
+WP4-01…WP4-08 / DEF-0009 
+
+Sections 4 and 11; clarification/schema/provider anchors; RT-B01…B04, IC-10. 
+
+Revised identity/evidence/materiality 
+
+Sections 5–9; policy/stage schemas; IC-01…IC-11. 
+
+Storage/lineage/review/history 
+
+Section 10; persistence/read/promotion anchors; RT-C01, IC-09/12. 
+
+Candidate wording and processing UX 
+
+Appendix A; sections 12–13 and standing rule; UX-01…06. 
+
+Provider pilot/release 
+
+Sections 11 and 17; configured adapter; evidence control and integrated gate results. 
+
+Source and version register 
+
+Revision 1.1 dated 16 October; supplied AWEM WP-CAND-004 reliability pack incorporated there; code and inline shared rules/schemas/provider supplied on 19 October; source extraction record v1.0; Steve’s processing-state UX agreement on 19 October. The original candidate advisory/answer guidance remains mandatory: display the exact wording from revision 1.1 page 6 at the actual review/answer locations, with the described edit/remove/add actions available. 
+
+Current-source fingerprints: route upload SHA256 92b57fa201e71bc0730ca07e2b8c2ee9d5c4f89b1b2bb75b290a50c5fa7f0363; clarification upload SHA256 8187044062e2a6516c168e456e078430c486e04576a40d18f969966886cef007. Inline snippets require capture/hash in the implementation bundle. 
+
+This revision completes the revised planning pack. It is not a deployed implementation, a validated migration package or a claim that the new consolidated IC wording has passed provider evaluation. Current-source/schema reconciliation and the full executable payload are the next technical deliverables. 
+
+ 
+
+Appendix A. Candidate guidance retained unchanged 
+
+Before profile approval 
+
+Your profile is a draft based on the information you provide. Please check that each statement accurately describes what you personally did, including work you shared or completed under supervision. You can correct, remove or add information before approving it. If something is unclear or missing, that does not mean you lack the ability. 
+
+Display the advisory before approval and ensure the described correct, remove and add actions are available. Candidate approval confirms their account; it must not be presented as independent verification of competence. 
+
+On the answer form 
+
+Describe what you personally did and, where relevant, the tools or techniques you used. If you worked with others, make your own contribution clear. Shared or supervised work is equally useful—just explain your part. 
+
+A short, specific example helps us build a fuller and more accurate profile. You do not need to describe every step or provide a measurable result. If you only observed an activity, did not perform part of it, or cannot recall an example, please say so. 
+
+Scope and ownership 
+
+Candidate approval confirms the candidate’s account, not independently verified competence. Keep exact source excerpts and ownership separate from readable profile wording. Reusable occupational knowledge is not proof that an individual performed an activity. Preserve candidate correction and unresolved uncertainty; wording is not a substitute for supported assessments. 

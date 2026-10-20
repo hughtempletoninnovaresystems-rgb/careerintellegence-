@@ -34,19 +34,35 @@ export const cvCapabilitySignalAssessmentSchema = z.object({
   ).max(100).default([]),
 });
 
+// Legacy clarification persistence still uses demonstrated / gap / needs_clarification.
+// Follow-up fields are REQUIRED and NULLABLE; no-follow-up is always null/null.
+// Do not silently coerce an invalid/missing follow-up into an invented question.
 export const evaluationSchema = z.object({
-  questionId: z.coerce.string().max(100),
-  competency: z.coerce.string().trim().min(1).max(500),
+  questionId: z.string().trim().min(1).max(100),
+  competency: capabilityName,
   status: z.enum(["demonstrated", "gap", "needs_clarification"]),
-  evidence: evidenceText.default(""),
-  confidence: z.coerce.number().min(0).max(1),
-  followUpQuestion: z.string().max(5_000).optional().default(""),
-  followUpReason: z.string().max(5_000).optional().default(""),
-  emergingCapabilities: z.array(extractedCapabilitySchema).max(50).optional().default([]),
+  evidence: evidenceText,
+  confidence: z.number().min(0).max(1),
+  followUpQuestion: z.string().trim().min(1).max(5_000).nullable(),
+  followUpReason: z.string().trim().min(1).max(5_000).nullable(),
+  emergingCapabilities: z.array(extractedCapabilitySchema).max(50),
+}).superRefine((evaluation, ctx) => {
+  const needsFollowUp = evaluation.status === "needs_clarification";
+  for (const field of ["followUpQuestion", "followUpReason"] as const) {
+    if (needsFollowUp ? evaluation[field] === null : evaluation[field] !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: needsFollowUp
+          ? "A focused follow-up question and reason are both required."
+          : "A resolved or closed-unresolved question must use null follow-up fields.",
+      });
+    }
+  }
 });
 
 export const evaluationListSchema = z.object({
-  evaluations: z.array(evaluationSchema).max(100).default([]),
+  evaluations: z.array(evaluationSchema).min(1).max(100),
 });
 
 export const finalSubmissionCheckSchema = z.object({

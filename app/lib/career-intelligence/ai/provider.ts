@@ -6,6 +6,7 @@ import { AIProviderError } from "../errors";
 import { careerIntelligenceConfig } from "../config";
 import { geminiText } from "../utils";
 import { AIOutputValidationError, parseValidatedJson } from "./parse-json";
+import { generateOpenAIJson } from "./openai-adapter";
 
 let client: GoogleGenAI | null = null;
 
@@ -61,6 +62,7 @@ function actualModelVersion(response: unknown): string | null {
 }
 
 async function recordAIInvocation({
+  provider,
   requestedModel,
   actualModel,
   promptHash,
@@ -70,6 +72,7 @@ async function recordAIInvocation({
   elapsedMs,
   context,
 }: {
+  provider: "google" | "openai";
   requestedModel: string;
   actualModel: string | null;
   promptHash: string;
@@ -95,7 +98,7 @@ async function recordAIInvocation({
       created_at
     )
     VALUES (
-      'google',
+      ${provider},
       ${requestedModel},
       ${actualModel},
       ${promptHash},
@@ -117,36 +120,62 @@ export async function generateValidatedJson<T>({
   model = careerIntelligenceConfig.aiModel,
   timeoutMs = careerIntelligenceConfig.aiTimeoutMs,
   context,
+  pilotProvider,
 }: {
   prompt: string;
   schema: ZodType<T>;
   model?: string;
   timeoutMs?: number;
   context?: AIInvocationContext;
+  pilotProvider?: "google" | "openai";
 }): Promise<T> {
-  // A single bounded regeneration handles malformed/incomplete Gemini JSON;
-  // nothing is written to role capabilities until validation has succeeded.
+  // Only explicitly configured pilots may use OpenAI. The provider switch
+  // NEVER occurs merely because the adapter is deployed.
+  const provider = pilotProvider || "google";
+  if (provider === "openai" && (
+    context?.operation !== "revised_ic_preview" ||
+    process.env.CAREER_OPENAI_PILOT_ENABLED !== "true" ||
+    process.env.CAREER_REVISED_PILOT_ENABLED !== "true"
+  )) {
+    throw new AIProviderError("The OpenAI preview is not authorised.");
+  }
+  const requestedModel = provider === "openai" ? process.env.OPENAI_MODEL : model;
+  if (!requestedModel) throw new AIProviderError("The chosen AI model is not configured.");
+  // At most two generation attempts. Each attempt is separately audited.
   let retryHint = "";
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const attemptPrompt = prompt + retryHint;
     const startedAt = Date.now();
     const promptHash = sha256(attemptPrompt);
-    let response: unknown;
+    let outputText = "";
+    let actualModel: string | null = null;
 
     try {
-      response = await withTimeout(
-        getClient().models.generateContent({
-          model,
-          contents: attemptPrompt,
-          config: { responseMimeType: "application/json" },
-        }),
-        timeoutMs,
-      );
+      if (provider === "openai") {
+        const output = await generateOpenAIJson({
+          model: requestedModel, prompt: attemptPrompt, timeoutMs,
+          operation: context?.operation,
+        });
+        outputText = output.outputText;
+        actualModel = output.actualModel;
+      } else {
+        const response = await withTimeout(
+          getClient().models.generateContent({
+            model: requestedModel,
+            contents: attemptPrompt,
+            config: { responseMimeType: "application/json" },
+          }),
+          timeoutMs,
+        );
+        outputText = geminiText(response);
+        actualModel = actualModelVersion(response);
+      }
     } catch (error) {
       try {
         await recordAIInvocation({
-          requestedModel: model,
+          provider,
+          requestedModel,
           actualModel: null,
           promptHash,
           outputHash: null,
@@ -168,8 +197,6 @@ export async function generateValidatedJson<T>({
       throw new AIProviderError("The AI assessment service is unavailable.");
     }
 
-    const outputText = geminiText(response);
-    const actualModel = actualModelVersion(response);
     let parsed: T;
 
     try {
@@ -178,7 +205,8 @@ export async function generateValidatedJson<T>({
       const validationError = error instanceof AIOutputValidationError ? error : null;
       try {
         await recordAIInvocation({
-          requestedModel: model,
+          provider,
+          requestedModel,
           actualModel,
           promptHash,
           outputHash: sha256(outputText),

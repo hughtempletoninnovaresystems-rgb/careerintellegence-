@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useCareerProcessing, processingMessages } from "./use-career-processing";
 
 /*
  * ============================================================
@@ -89,7 +90,8 @@ type Capability = {
 
   capabilityStatus?:
     | "demonstrated"
-    | "gap";
+    | "gap"
+    | "signal";
 
   assessmentStatus?:
     string;
@@ -718,11 +720,11 @@ export default function CVUpload() {
       JourneySource | null
     >(null);
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(false);
+  const {
+    loading, processingAction, processingMessage,
+    beginProcessing, finishProcessing, markResultUncertain, uncertain,
+  } = useCareerProcessing();
+
 
   const [
     message,
@@ -781,6 +783,8 @@ export default function CVUpload() {
       >
     >({});
 
+  const [newCapabilityName, setNewCapabilityName] = useState("");
+  const [newCapabilityEvidence, setNewCapabilityEvidence] = useState("");
   const [
     editingCapabilityId,
     setEditingCapabilityId,
@@ -1050,7 +1054,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("upload_cv")) return;
     setMessage("");
 
     try {
@@ -1157,7 +1161,7 @@ export default function CVUpload() {
           : "Unable to analyse CV."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -1220,7 +1224,7 @@ export default function CVUpload() {
   }
 
   async function startManualAssessment() {
-    setLoading(true);
+    if (!beginProcessing("start_manual")) return;
     setMessage("");
 
     try {
@@ -1365,7 +1369,7 @@ export default function CVUpload() {
           : "Unable to start the assessment."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -1397,7 +1401,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("submit_answers")) return;
     setMessage("");
 
     try {
@@ -1564,7 +1568,7 @@ export default function CVUpload() {
           : "Unable to assess clarification responses."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -1586,7 +1590,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("review_capability")) return;
     setMessage("");
 
     try {
@@ -1703,7 +1707,7 @@ export default function CVUpload() {
           : "Unable to review capability."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -1770,7 +1774,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("save_edit")) return;
     setMessage("");
 
     try {
@@ -1886,7 +1890,32 @@ export default function CVUpload() {
           : "Unable to update capability."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
+    }
+  }
+
+  async function addCapabilityProposal() {
+    if (!currentRole || !journeySource) return;
+    if (!newCapabilityName.trim() || !newCapabilityEvidence.trim()) {
+      setMessage("Enter a capability name and describe your own contribution.");
+      return;
+    }
+    if (!beginProcessing("add_capability")) return;
+    setMessage("");
+    try {
+      const data = await postJson(getActionRoute(), {
+        action: "add_capability", roleAssessmentId: currentRole.id,
+        competencyName: newCapabilityName.trim(), evidence: newCapabilityEvidence.trim(),
+      });
+      if (!data.role) throw new Error("The updated role was not returned.");
+      updateRoleInState(normaliseRole(data.role, journeySource));
+      setNewCapabilityName("");
+      setNewCapabilityEvidence("");
+      setMessage("Your statement was recorded as a proposal. It has not been independently assessed or approved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to add this capability.");
+    } finally {
+      finishProcessing();
     }
   }
 
@@ -1976,7 +2005,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("save_role")) return;
     setMessage("");
 
     try {
@@ -2163,7 +2192,7 @@ export default function CVUpload() {
           : "Unable to update role."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -2179,7 +2208,7 @@ export default function CVUpload() {
       return;
     }
 
-    setLoading(true);
+    if (!beginProcessing("complete_role")) return;
     setMessage("");
 
     try {
@@ -2397,7 +2426,7 @@ export default function CVUpload() {
           : "Unable to submit role. Your current role has been retained; please try again."
       );
     } finally {
-      setLoading(false);
+      finishProcessing();
     }
   }
 
@@ -2510,6 +2539,19 @@ export default function CVUpload() {
     );
   }
 
+  function renderProcessingNotice() {
+    return (
+      <div role="status" aria-live="polite" aria-atomic="true" className="min-h-[1.5rem]">
+        {processingMessage && (
+          <div className="my-4 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <span aria-hidden="true" className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700 motion-reduce:animate-none" />
+            <span>{processingMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   /* ============================================================
      CHOICE
   ============================================================ */
@@ -2519,7 +2561,7 @@ export default function CVUpload() {
     "choice"
   ) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div aria-busy={loading} className="mx-auto w-full max-w-5xl p-6">
         <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
             Career Intelligence
@@ -2536,7 +2578,7 @@ export default function CVUpload() {
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <button
+            <button disabled={loading}
               type="button"
               onClick={
                 handleHasCV
@@ -2553,7 +2595,7 @@ export default function CVUpload() {
               </p>
             </button>
 
-            <button
+            <button disabled={loading}
               type="button"
               onClick={
                 handleNoCV
@@ -2582,9 +2624,9 @@ export default function CVUpload() {
     "cv"
   ) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div aria-busy={loading} className="mx-auto w-full max-w-5xl p-6">
         <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-          <button
+          <button disabled={loading}
             type="button"
             onClick={() => {
               setViewMode(
@@ -2604,6 +2646,7 @@ export default function CVUpload() {
             Upload your CV
           </h1>
 
+          {renderProcessingNotice()}
           <p className="mt-2 text-slate-600">
             Select your CV to begin the Career Intelligence review.
           </p>
@@ -2644,7 +2687,7 @@ export default function CVUpload() {
           </div>
 
           {message && (
-            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div role="status" aria-live="polite" className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               {message}
             </div>
           )}
@@ -2661,7 +2704,7 @@ export default function CVUpload() {
             className="mt-6 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {loading
-              ? "Analysing CV..."
+              ? processingMessages.upload_cv.button
               : "Upload and analyse CV"}
           </button>
         </div>
@@ -2678,8 +2721,8 @@ export default function CVUpload() {
     "manual"
   ) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
-        <button
+      <div aria-busy={loading} className="mx-auto w-full max-w-5xl p-6">
+        <button disabled={loading}
           type="button"
           onClick={() =>
             setViewMode(
@@ -2694,6 +2737,7 @@ export default function CVUpload() {
         <h1 className="mt-5 text-2xl font-bold text-slate-900">
           Enter your career experience
         </h1>
+          {renderProcessingNotice()}
 
         <div className="mt-6 space-y-6">
           {manualRoles.map(
@@ -2716,7 +2760,7 @@ export default function CVUpload() {
 
                   {manualRoles.length >
                     1 && (
-                    <button
+                    <button disabled={loading}
                       type="button"
                       onClick={() =>
                         removeManualRole(
@@ -2731,7 +2775,7 @@ export default function CVUpload() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <input
+                  <input disabled={loading}
                     placeholder="Organisation"
                     value={
                       role.organisation
@@ -2749,7 +2793,7 @@ export default function CVUpload() {
                     className="rounded-lg border px-3 py-2"
                   />
 
-                  <input
+                  <input disabled={loading}
                     placeholder="Role title"
                     value={
                       role.roleTitle
@@ -2772,7 +2816,7 @@ export default function CVUpload() {
                       From
                     </span>
 
-                    <input
+                    <input disabled={loading}
                       type="date"
                       value={
                         role.fromDate
@@ -2820,7 +2864,7 @@ export default function CVUpload() {
                     />
 
                     <label className="mt-2 flex items-center gap-2">
-                      <input
+                      <input disabled={loading}
                         type="checkbox"
                         checked={
                           role.currentRole
@@ -2851,7 +2895,7 @@ export default function CVUpload() {
                   </div>
                 </div>
 
-                <textarea
+                <textarea disabled={loading}
                   rows={7}
                   placeholder="Role description and achievements"
                   value={
@@ -2881,7 +2925,7 @@ export default function CVUpload() {
         )}
 
         <div className="mt-6 flex gap-3">
-          <button
+          <button disabled={loading}
             type="button"
             onClick={
               addManualRole
@@ -2901,8 +2945,7 @@ export default function CVUpload() {
             }
             className="rounded-lg bg-slate-900 px-5 py-2 text-white"
           >
-            Start career
-            review
+            {processingAction === "start_manual" ? processingMessages.start_manual.button : "Start career review"}
           </button>
         </div>
       </div>
@@ -2918,7 +2961,7 @@ export default function CVUpload() {
     "complete"
   ) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div aria-busy={loading} className="mx-auto w-full max-w-5xl p-6">
         <div className="rounded-xl border bg-white p-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-600 text-white">
             ✓
@@ -2954,6 +2997,7 @@ export default function CVUpload() {
 
   return (
     <div className="mx-auto w-full max-w-6xl p-6">
+      {renderProcessingNotice()}
       <div className="flex justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase text-slate-500">
@@ -3001,7 +3045,7 @@ export default function CVUpload() {
           {!roleContextEditing &&
             currentRole.lifecycleStatus !==
               "completed" && (
-              <button
+              <button disabled={loading}
                 type="button"
                 onClick={() =>
                   setRoleContextEditing(
@@ -3025,7 +3069,7 @@ export default function CVUpload() {
                   Organisation
                 </span>
 
-                <input
+                <input disabled={loading}
                   value={
                     currentRole.organisation
                   }
@@ -3046,7 +3090,7 @@ export default function CVUpload() {
                   Role title
                 </span>
 
-                <input
+                <input disabled={loading}
                   value={
                     currentRole.roleTitle
                   }
@@ -3067,7 +3111,7 @@ export default function CVUpload() {
                   From
                 </span>
 
-                <input
+                <input disabled={loading}
                   type="date"
                   value={
                     currentRole.fromDate ??
@@ -3141,7 +3185,7 @@ export default function CVUpload() {
                 />
 
                 <label className="mt-2 flex items-center gap-2">
-                  <input
+                  <input disabled={loading}
                     type="checkbox"
                     checked={
                       currentRole
@@ -3172,7 +3216,7 @@ export default function CVUpload() {
               </div>
             </div>
 
-            <textarea
+            <textarea disabled={loading}
               rows={7}
               value={
                 currentRole.description
@@ -3198,7 +3242,7 @@ export default function CVUpload() {
               }
               className="mt-4 rounded-lg border px-4 py-2"
             >
-              Save role context
+              {processingAction === "save_role" ? processingMessages.save_role.button : "Save role context"}
             </button>
           </>
         ) : (
@@ -3295,7 +3339,7 @@ export default function CVUpload() {
                     }
                   </p>
 
-                  <textarea
+                  <textarea disabled={loading}
                     rows={4}
                     value={
                       answers[
@@ -3329,10 +3373,58 @@ export default function CVUpload() {
             }
             className="mt-5 rounded-lg bg-slate-900 px-5 py-2 text-white"
           >
-            Submit
-            clarification
-            responses
+            {processingAction === "submit_answers" ? processingMessages.submit_answers.button : "Submit clarification responses"}
           </button>
+        </section>
+      )}
+
+      <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        Describe what you personally did and, where relevant, the tools or techniques you used. If you worked with others, make your own contribution clear. Shared or supervised work is equally useful—just explain your part.
+      </p>
+      <p className="mt-2 text-sm text-slate-600">A short, specific example helps us build a fuller and more accurate profile. You do not need to describe every step or provide a measurable result. If you only observed an activity, did not perform part of it, or cannot recall an example, please say so.</p>
+
+      <p className="mt-5 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        Your profile is a draft based on the information you provide. Please check that each statement accurately describes what you personally did, including work you shared or completed under supervision. You can correct, remove or add information before approving it. If something is unclear or missing, that does not mean you lack the ability.
+      </p>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold">Add a capability to your draft</h2>
+        <p className="mt-1 text-sm text-slate-600">Add what you personally did. This remains a source signal until it is assessed and reviewed.</p>
+        <input disabled={loading} aria-label="New capability name" value={newCapabilityName}
+          onChange={(e) => setNewCapabilityName(e.target.value)}
+          placeholder="Capability name" className="mt-4 w-full rounded-lg border px-3 py-2" />
+        <textarea disabled={loading} aria-label="Your evidence" value={newCapabilityEvidence}
+          onChange={(e) => setNewCapabilityEvidence(e.target.value)}
+          rows={3} placeholder="Describe what you personally did" className="mt-3 w-full rounded-lg border px-3 py-2" />
+        <button type="button" disabled={loading} onClick={addCapabilityProposal}
+          className="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50">
+          {processingAction === "add_capability" ? processingMessages.add_capability.button : "Add capability proposal"}
+        </button>
+      </section>
+
+      {currentRole.capabilities.some((capability) => capability.capabilityStatus === "signal") && (
+        <section className="mt-6 rounded-xl border border-amber-200 p-5">
+          <h2 className="font-semibold">Capabilities awaiting assessment</h2>
+          {currentRole.capabilities.filter((capability) => capability.capabilityStatus === "signal").map((capability) => (
+            <article key={capability.id} className="mt-3 rounded-lg border p-3">
+              <p className="font-semibold">{capability.name}</p>
+              <p className="mt-1 text-sm text-slate-600">{capability.evidence}</p>
+              <button disabled={loading} type="button" onClick={() => startCapabilityEdit(capability)}
+                className="mt-2 rounded-lg border px-3 py-1 text-sm">Provide or correct evidence</button>
+              {editingCapabilityId === capability.id && (
+                <div className="mt-3 space-y-2">
+                  <input disabled={loading} aria-label="Edit capability name" value={editedCapabilityName}
+                    onChange={(e) => setEditedCapabilityName(e.target.value)} className="w-full rounded-lg border px-3 py-2" />
+                  <textarea disabled={loading} aria-label="Edit capability evidence" value={editedCapabilityEvidence}
+                    onChange={(e) => setEditedCapabilityEvidence(e.target.value)} className="w-full rounded-lg border px-3 py-2" />
+                  <button disabled={loading} type="button" onClick={() => saveCapabilityEdit(capability)}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-white">{processingAction === "save_edit" ? processingMessages.save_edit.button : "Save and reassess"}</button>
+                  <button disabled={loading} type="button" onClick={cancelCapabilityEdit}
+                    className="ml-2 rounded-lg border px-4 py-2">Cancel</button>
+                </div>
+              )}
+            </article>
+          ))}
         </section>
       )}
 
@@ -3358,7 +3450,7 @@ export default function CVUpload() {
                 {editingCapabilityId ===
                 capability.id ? (
                   <>
-                    <input
+                    <input disabled={loading}
                       value={
                         editedCapabilityName
                       }
@@ -3373,7 +3465,7 @@ export default function CVUpload() {
                       className="w-full rounded-lg border px-3 py-2"
                     />
 
-                    <textarea
+                    <textarea disabled={loading}
                       rows={4}
                       value={
                         editedCapabilityEvidence
@@ -3390,7 +3482,7 @@ export default function CVUpload() {
                     />
 
                     <div className="mt-3 flex gap-2">
-                      <button
+                      <button disabled={loading}
                         onClick={() =>
                           saveCapabilityEdit(
                             capability
@@ -3398,10 +3490,10 @@ export default function CVUpload() {
                         }
                         className="rounded-lg bg-slate-900 px-4 py-2 text-white"
                       >
-                        Save edit
+                        {processingAction === "save_edit" ? processingMessages.save_edit.button : "Save edit"}
                       </button>
 
-                      <button
+                      <button disabled={loading}
                         onClick={
                           cancelCapabilityEdit
                         }
@@ -3433,7 +3525,7 @@ export default function CVUpload() {
                     {capability.reviewStatus ===
                       "proposed" && (
                       <div className="mt-4 flex gap-2">
-                        <button
+                        <button disabled={loading}
                           onClick={() =>
                             reviewCapability(
                               capability,
@@ -3445,7 +3537,7 @@ export default function CVUpload() {
                           Accept
                         </button>
 
-                        <button
+                        <button disabled={loading}
                           onClick={() =>
                             startCapabilityEdit(
                               capability
@@ -3456,7 +3548,7 @@ export default function CVUpload() {
                           Edit
                         </button>
 
-                        <button
+                        <button disabled={loading}
                           onClick={() =>
                             reviewCapability(
                               capability,
@@ -3526,7 +3618,7 @@ export default function CVUpload() {
           className="rounded-lg bg-slate-900 px-6 py-3 text-white disabled:opacity-50"
         >
           {loading
-            ? "Processing..."
+            ? processingMessages.complete_role.button
             : "Complete this role"}
         </button>
       </div>

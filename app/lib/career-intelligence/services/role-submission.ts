@@ -34,6 +34,20 @@ async function countOpenQuestions(roleAssessmentId: string) {
   return Number(result.rows[0]?.count || 0);
 }
 
+/** A closed-unresolved response must not be silently promoted as a competence gap. */
+async function countUnresolvedClosedEvidence(roleAssessmentId: string) {
+  const result = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM career_role_capabilities
+    WHERE role_assessment_id=${roleAssessmentId}
+      AND (
+        (capability_status='gap' AND assessment_status='needs_clarification')
+        OR (capability_status='signal' AND source_type='candidate_statement')
+      )
+  `;
+  return Number(result.rows[0]?.count || 0);
+}
+
 async function countUnreviewedDemonstratedCapabilities(roleAssessmentId: string) {
   const result = await sql`
     SELECT COUNT(*)::int AS count
@@ -217,6 +231,13 @@ export async function submitRoleForProfile({
     );
   }
 
+  if ((await countUnresolvedClosedEvidence(roleAssessmentId)) > 0) {
+    throw new CareerIntelligenceError(
+      "This role includes evidence or candidate additions that require assessment. Review or update the capability before completing the role.",
+      { status: 409, code: "unresolved_evidence_review_required", expose: true },
+    );
+  }
+
   const finalCheck = await runFinalRoleReview(initial);
 
   if (
@@ -350,6 +371,20 @@ export async function submitRoleForProfile({
           code: "assessment_state_changed",
           expose: true,
         },
+      );
+    }
+
+    const unresolved = await query`
+      SELECT id FROM career_role_capabilities
+      WHERE role_assessment_id=${roleAssessmentId}
+        AND ((capability_status='gap' AND assessment_status='needs_clarification')
+          OR (capability_status='signal' AND source_type='candidate_statement'))
+      LIMIT 1
+    `;
+    if (unresolved.rows.length) {
+      throw new CareerIntelligenceError(
+        "Unresolved evidence requires review before role completion.",
+        { status: 409, code: "unresolved_evidence_review_required", expose: true },
       );
     }
 

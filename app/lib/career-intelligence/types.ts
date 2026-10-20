@@ -42,9 +42,9 @@ export type Evaluation = {
     | "needs_clarification";
   evidence: string;
   confidence: number;
-  followUpQuestion?: string;
-  followUpReason?: string;
-  emergingCapabilities?: ExtractedCapability[];
+  followUpQuestion: string | null;
+  followUpReason: string | null;
+  emergingCapabilities: ExtractedCapability[];
 };
 
 export type SuccessGate = {

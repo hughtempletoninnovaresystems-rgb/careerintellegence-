@@ -47,6 +47,7 @@ import { getCorrelationId, withCorrelationId } from "@/app/lib/career-intelligen
 
 
 import { reviewRoleCapability } from "@/app/lib/career-intelligence/services/capability-review";
+import { addCandidateCapability } from "@/app/lib/career-intelligence/services/candidate-capability";
 import { recordCapabilityEvidence } from "@/app/lib/career-intelligence/services/provenance";
 
 
@@ -2924,23 +2925,23 @@ async function reassessEditedCapability({
 
 
 
-  userId,
+  userId,
 
 
 
-  roleAssessmentId,
+  roleAssessmentId,
 
 
 
-  capabilityId,
+  capabilityId,
 
 
 
-  editedCompetencyName,
+  editedCompetencyName,
 
 
 
-  editedEvidence,
+  editedEvidence,
 
 
 
@@ -2948,47 +2949,47 @@ async function reassessEditedCapability({
 
 
 
-  userId: string;
+  userId: string;
 
 
 
-  roleAssessmentId: string;
+  roleAssessmentId: string;
 
 
 
-  capabilityId: string;
+  capabilityId: string;
 
 
 
-  editedCompetencyName:
+  editedCompetencyName:
 
 
 
-    | string
+    | string
 
 
 
-    | null
+    | null
 
 
 
-    | undefined;
+    | undefined;
 
 
 
-  editedEvidence:
+  editedEvidence:
 
 
 
-    | string
+    | string
 
 
 
-    | null
+    | null
 
 
 
-    | undefined;
+    | undefined;
 
 
 
@@ -2996,23 +2997,23 @@ async function reassessEditedCapability({
 
 
 
-  const competencyName =
+  const competencyName =
 
 
 
-    String(
+    String(
 
 
 
-      editedCompetencyName ||
+      editedCompetencyName ||
 
 
 
-        ""
+        ""
 
 
 
-    ).trim();
+    ).trim();
 
 
 
@@ -3020,23 +3021,23 @@ async function reassessEditedCapability({
 
 
 
-  const evidence =
+  const evidence =
 
 
 
-    String(
+    String(
 
 
 
-      editedEvidence ||
+      editedEvidence ||
 
 
 
-        ""
+        ""
 
 
 
-    ).trim();
+    ).trim();
 
 
 
@@ -3044,47 +3045,47 @@ async function reassessEditedCapability({
 
 
 
-  if (!competencyName) {
+  if (!competencyName) {
 
 
 
-    throw new CareerIntelligenceError(
+    throw new CareerIntelligenceError(
 
 
 
-      "Capability name is required when editing.",
+      "Capability name is required when editing.",
 
 
 
-      {
+      {
 
 
 
-        status: 400,
+        status: 400,
 
 
 
-        code:
+        code:
 
 
 
-          "edited_capability_name_required",
+          "edited_capability_name_required",
 
 
 
-        expose: true,
+        expose: true,
 
 
 
-      }
+      }
 
 
 
-    );
+    );
 
 
 
-  }
+  }
 
 
 
@@ -3092,47 +3093,47 @@ async function reassessEditedCapability({
 
 
 
-  if (!evidence) {
+  if (!evidence) {
 
 
 
-    throw new CareerIntelligenceError(
+    throw new CareerIntelligenceError(
 
 
 
-      "Capability evidence is required when editing.",
+      "Capability evidence is required when editing.",
 
 
 
-      {
+      {
 
 
 
-        status: 400,
+        status: 400,
 
 
 
-        code:
+        code:
 
 
 
-          "edited_capability_evidence_required",
+          "edited_capability_evidence_required",
 
 
 
-        expose: true,
+        expose: true,
 
 
 
-      }
+      }
 
 
 
-    );
+    );
 
 
 
-  }
+  }
 
 
 
@@ -3140,39 +3141,39 @@ async function reassessEditedCapability({
 
 
 
-  /*
+  /*
 
 
 
-    * Verify ownership before reading or
+    * Verify ownership before reading or
 
 
 
-    * reassessing any role intelligence.
+    * reassessing any role intelligence.
 
 
 
-   */
+   */
 
 
 
-  const assessmentId =
+  const assessmentId =
 
 
 
-    await verifyRoleOwnership(
+    await verifyRoleOwnership(
 
 
 
-      roleAssessmentId,
+      roleAssessmentId,
 
 
 
-      userId
+      userId
 
 
 
-    );
+    );
 
 
 
@@ -3180,27 +3181,27 @@ async function reassessEditedCapability({
 
 
 
-  /*
+  /*
 
 
 
-    * Ensure that the capability belongs to
+    * Ensure that the capability belongs to
 
 
 
-    * this role before spending an AI call.
+    * this role before spending an AI call.
 
 
 
-   */
+   */
 
 
 
-  const existingCapability =
+  const existingCapability =
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -3236,59 +3237,59 @@ async function reassessEditedCapability({
 
 
 
-  if (
+  if (
 
 
 
-    !existingCapability
+    !existingCapability
 
 
 
-      .rows.length
+      .rows.length
 
 
 
-  ) {
+  ) {
 
 
 
-    throw new CareerIntelligenceError(
+    throw new CareerIntelligenceError(
 
 
 
-      "Capability not found.",
+      "Capability not found.",
 
 
 
-      {
+      {
 
 
 
-        status: 404,
+        status: 404,
 
 
 
-        code:
+        code:
 
 
 
-          "capability_not_found",
+          "capability_not_found",
 
 
 
-        expose: true,
+        expose: true,
 
 
 
-      }
+      }
 
 
 
-    );
+    );
 
 
 
-  }
+  }
 
 
 
@@ -3296,19 +3297,19 @@ async function reassessEditedCapability({
 
 
 
-  const role =
+  const role =
 
 
 
-    await getRolePayload(
+    await getRolePayload(
 
 
 
-      roleAssessmentId
+      roleAssessmentId
 
 
 
-    );
+    );
 
 
 
@@ -3316,23 +3317,23 @@ async function reassessEditedCapability({
 
 
 
-  const roleTitle =
+  const roleTitle =
 
 
 
-    String(
+    String(
 
 
 
-      role?.roleTitle ||
+      role?.roleTitle ||
 
 
 
-        ""
+        ""
 
 
 
-    ).trim();
+    ).trim();
 
 
 
@@ -3340,47 +3341,47 @@ async function reassessEditedCapability({
 
 
 
-  /*
+  /*
 
 
 
-    * Candidate edit = new intelligence.
+    * Candidate edit = new intelligence.
 
 
 
-   *
+   *
 
 
 
-    * It must be reassessed independently
+    * It must be reassessed independently
 
 
 
-    * rather than inheriting the previous
+    * rather than inheriting the previous
 
 
 
-    * demonstrated state.
+    * demonstrated state.
 
 
 
-   */
+   */
 
 
 
-  const reassessment =
+  const reassessment =
 
 
 
-    await generateValidatedJson({
+    await generateValidatedJson({
 
 
 
-      schema:
+      schema:
 
 
 
-        editedCapabilityReassessmentSchema,
+        editedCapabilityReassessmentSchema,
 
 
 
@@ -3388,7 +3389,7 @@ async function reassessEditedCapability({
 
 
 
-      prompt: `
+      prompt: `
 
 
 
@@ -3468,59 +3469,59 @@ Return JSON only:
 
 
 
-  "outcome": "demonstrated | needs_clarification | gap",
+  "outcome": "demonstrated | needs_clarification | gap",
 
 
 
-  "evidence": "",
+  "evidence": "",
 
 
 
-  "confidence": 0.0,
+  "confidence": 0.0,
 
 
 
-  "clarification": {
+  "clarification": {
 
 
 
-    "reason": "",
+    "reason": "",
 
 
 
-    "question": ""
+    "question": ""
 
 
 
-  },
+  },
 
 
 
-  "emergingCapabilities": [
+  "emergingCapabilities": [
 
 
 
-    {
+    {
 
 
 
-      "name": "",
+      "name": "",
 
 
 
-      "evidence": "",
+      "evidence": "",
 
 
 
-      "confidence": 0.0
+      "confidence": 0.0
 
 
 
-    }
+    }
 
 
 
-  ]
+  ]
 
 
 
@@ -3544,11 +3545,11 @@ ASSESSMENT RULES:
 
 
 
-  The edited evidence directly supports the edited capability.
+  The edited evidence directly supports the edited capability.
 
 
 
-  Return a faithful first-person evidence statement and confidence.
+  Return a faithful first-person evidence statement and confidence.
 
 
 
@@ -3560,11 +3561,11 @@ ASSESSMENT RULES:
 
 
 
-  There is a plausible capability signal, but the supplied evidence is not yet sufficient to classify it as demonstrated or as an assessed gap.
+  There is a plausible capability signal, but the supplied evidence is not yet sufficient to classify it as demonstrated or as an assessed gap.
 
 
 
-  Return ONE focused clarification question asking only for the missing evidence.
+  Return ONE focused clarification question asking only for the missing evidence.
 
 
 
@@ -3576,11 +3577,11 @@ ASSESSMENT RULES:
 
 
 
-  The evidence does not establish the edited capability and further clarification would not reasonably resolve the supplied evidence as demonstrated.
+  The evidence does not establish the edited capability and further clarification would not reasonably resolve the supplied evidence as demonstrated.
 
 
 
-  Do not treat it as demonstrated.
+  Do not treat it as demonstrated.
 
 
 
@@ -3653,7 +3654,7 @@ ${evidence}
 
 
 
-    });
+    });
 
 
 
@@ -3661,23 +3662,23 @@ ${evidence}
 
 
 
-  const outcome =
+  const outcome =
 
 
 
-    reassessment.outcome ===
+    reassessment.outcome ===
 
 
 
-    "clarify"
+    "clarify"
 
 
 
-      ? "needs_clarification"
+      ? "needs_clarification"
 
 
 
-      : reassessment.outcome;
+      : reassessment.outcome;
 
 
 
@@ -3685,19 +3686,19 @@ ${evidence}
 
 
 
-  const assessedEvidence =
+  const assessedEvidence =
 
 
 
-    reassessment
+    reassessment
 
 
 
-      .evidence
+      .evidence
 
 
 
-      .trim() || evidence;
+      .trim() || evidence;
 
 
 
@@ -3705,27 +3706,27 @@ ${evidence}
 
 
 
-  const confidence =
+  const confidence =
 
 
 
-    clamp(
+    clamp(
 
 
 
-      Number(
+      Number(
 
 
 
-        reassessment.confidence
+        reassessment.confidence
 
 
 
-      )
+      )
 
 
 
-    );
+    );
 
 
 
@@ -3733,35 +3734,35 @@ ${evidence}
 
 
 
-  /*
+  /*
 
 
 
-    * Resolve the edited identity separately
+    * Resolve the edited identity separately
 
 
 
-    * from evidence assessment.
+    * from evidence assessment.
 
 
 
-   */
+   */
 
 
 
-  const canonical =
+  const canonical =
 
 
 
-    await findCompetency(
+    await findCompetency(
 
 
 
-      competencyName
+      competencyName
 
 
 
-    );
+    );
 
 
 
@@ -3769,27 +3770,27 @@ ${evidence}
 
 
 
-  const canonicalCompetencyId =
+  const canonicalCompetencyId =
 
 
 
-    canonical
+    canonical
 
 
 
-      ? String(
+      ? String(
 
 
 
-          canonical.id
+          canonical.id
 
 
 
-        )
+        )
 
 
 
-      : null;
+      : null;
 
 
 
@@ -3797,47 +3798,47 @@ ${evidence}
 
 
 
-  /*
+  /*
 
 
 
-    * AUTHORITATIVE CAPABILITY WRITE
+    * AUTHORITATIVE CAPABILITY WRITE
 
 
 
-   *
+   *
 
 
 
-    * This MUST happen before success-gate
+    * This MUST happen before success-gate
 
 
 
-    * metadata is recorded.
+    * metadata is recorded.
 
 
 
-   */
+   */
 
 
 
-  if (
+  if (
 
 
 
-    outcome ===
+    outcome ===
 
 
 
-    "demonstrated"
+    "demonstrated"
 
 
 
-  ) {
+  ) {
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -3941,23 +3942,23 @@ ${evidence}
 
 
 
-  } else if (
+  } else if (
 
 
 
-    outcome ===
+    outcome ===
 
 
 
-    "needs_clarification"
+    "needs_clarification"
 
 
 
-  ) {
+  ) {
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -4037,11 +4038,11 @@ ${evidence}
 
 
 
-    const clarification =
+    const clarification =
 
 
 
-      reassessment.clarification;
+      reassessment.clarification;
 
 
 
@@ -4049,39 +4050,39 @@ ${evidence}
 
 
 
-    if (
+    if (
 
 
 
-      !clarification
+      !clarification
 
 
 
-        ?.question
+        ?.question
 
 
 
-        ?.trim()
+        ?.trim()
 
 
 
-    ) {
+    ) {
 
 
 
-      throw new Error(
+      throw new Error(
 
 
 
-        "GIAS reassessment returned needs_clarification without a clarification question."
+        "GIAS reassessment returned needs_clarification without a clarification question."
 
 
 
-      );
+      );
 
 
 
-    }
+    }
 
 
 
@@ -4089,27 +4090,27 @@ ${evidence}
 
 
 
-    await replaceOpenQuestions(
+    await replaceOpenQuestions(
 
 
 
-      roleAssessmentId,
+      roleAssessmentId,
 
 
 
-      [
+      [
 
 
 
-        {
+        {
 
 
 
-          competency:
+          competency:
 
 
 
-            competencyName,
+            competencyName,
 
 
 
@@ -4117,23 +4118,23 @@ ${evidence}
 
 
 
-          reason:
+          reason:
 
 
 
-            clarification
+            clarification
 
 
 
-              .reason
+              .reason
 
 
 
-              ?.trim() ||
+              ?.trim() ||
 
 
 
-            "Additional evidence is required.",
+            "Additional evidence is required.",
 
 
 
@@ -4141,31 +4142,31 @@ ${evidence}
 
 
 
-          question:
+          question:
 
 
 
-            clarification
+            clarification
 
 
 
-              .question
+              .question
 
 
 
-              .trim(),
+              .trim(),
 
 
 
-        },
+        },
 
 
 
-      ]
+      ]
 
 
 
-    );
+    );
 
 
 
@@ -4173,67 +4174,67 @@ ${evidence}
 
 
 
-    await transitionRoleLifecycle({
+    await transitionRoleLifecycle({
 
 
 
-      roleAssessmentId,
+      roleAssessmentId,
 
 
 
-      to: "in_progress",
+      to: "in_progress",
 
 
 
-    });
+    });
 
 
 
-  } else {
+  } else {
 
 
 
-    /*
+    /*
 
 
 
-      * Approved CR-001 gap behaviour:
+      * Approved CR-001 gap behaviour:
 
 
 
-     *
+     *
 
 
 
-      * - assessed
+      * - assessed
 
 
 
-      * - explicitly non-demonstrated
+      * - explicitly non-demonstrated
 
 
 
-      * - resolved as an accepted gap
+      * - resolved as an accepted gap
 
 
 
-     *
+     *
 
 
 
-      * It can therefore never satisfy
+      * It can therefore never satisfy
 
 
 
-      * demonstrated-capability promotion.
+      * demonstrated-capability promotion.
 
 
 
-     */
+     */
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -4337,7 +4338,7 @@ ${evidence}
 
 
 
-  }
+  }
 
 
 
@@ -4345,47 +4346,47 @@ ${evidence}
 
 
 
-  /*
+  /*
 
 
 
-    * Stage genuinely independent emerging
+    * Stage genuinely independent emerging
 
 
 
-    * intelligence.
+    * intelligence.
 
 
 
-   *
+   *
 
 
 
-    * Read identities AFTER the authoritative
+    * Read identities AFTER the authoritative
 
 
 
-    * row above has been written so that the
+    * row above has been written so that the
 
 
 
-    * edited identity itself participates in
+    * edited identity itself participates in
 
 
 
-    * de-duplication.
+    * de-duplication.
 
 
 
-   */
+   */
 
 
 
-  const existingIdentities =
+  const existingIdentities =
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -4425,11 +4426,11 @@ ${evidence}
 
 
 
-  const canonicalIds =
+  const canonicalIds =
 
 
 
-    new Set<string>();
+    new Set<string>();
 
 
 
@@ -4437,11 +4438,11 @@ ${evidence}
 
 
 
-  const names =
+  const names =
 
 
 
-    new Set<string>();
+    new Set<string>();
 
 
 
@@ -4449,63 +4450,63 @@ ${evidence}
 
 
 
-  for (
+  for (
 
 
 
-    const row of
+    const row of
 
 
 
-    existingIdentities.rows
+    existingIdentities.rows
 
 
 
-  ) {
+  ) {
 
 
 
-    if (
+    if (
 
 
 
-      row
+      row
 
 
 
-        .canonical_competency_id
+        .canonical_competency_id
 
 
 
-    ) {
+    ) {
 
 
 
-      canonicalIds.add(
+      canonicalIds.add(
 
 
 
-        String(
+        String(
 
 
 
-          row
+          row
 
 
 
-            .canonical_competency_id
+            .canonical_competency_id
 
 
 
-        )
+        )
 
 
 
-      );
+      );
 
 
 
-    }
+    }
 
 
 
@@ -4513,27 +4514,27 @@ ${evidence}
 
 
 
-    const proposedName =
+    const proposedName =
 
 
 
-      String(
+      String(
 
 
 
-        row
+        row
 
 
 
-          .proposed_competency_name ||
+          .proposed_competency_name ||
 
 
 
-          ""
+          ""
 
 
 
-      ).trim();
+      ).trim();
 
 
 
@@ -4541,27 +4542,27 @@ ${evidence}
 
 
 
-    const editedName =
+    const editedName =
 
 
 
-      String(
+      String(
 
 
 
-        row
+        row
 
 
 
-          .edited_competency_name ||
+          .edited_competency_name ||
 
 
 
-          ""
+          ""
 
 
 
-      ).trim();
+      ).trim();
 
 
 
@@ -4569,31 +4570,31 @@ ${evidence}
 
 
 
-    if (proposedName) {
+    if (proposedName) {
 
 
 
-      names.add(
+      names.add(
 
 
 
-        normaliseCapabilityIdentity(
+        normaliseCapabilityIdentity(
 
 
 
-          proposedName
+          proposedName
 
 
 
-        )
+        )
 
 
 
-      );
+      );
 
 
 
-    }
+    }
 
 
 
@@ -4601,35 +4602,35 @@ ${evidence}
 
 
 
-    if (editedName) {
+    if (editedName) {
 
 
 
-      names.add(
+      names.add(
 
 
 
-        normaliseCapabilityIdentity(
+        normaliseCapabilityIdentity(
 
 
 
-          editedName
+          editedName
 
 
 
-        )
+        )
 
 
 
-      );
+      );
 
 
 
-    }
+    }
 
 
 
-  }
+  }
 
 
 
@@ -4637,7 +4638,7 @@ ${evidence}
 
 
 
-  // Preserve the candidate's edited text as a distinct source record. The
+  // Preserve the candidate's edited text as a distinct source record. The
   // SQL revision trigger's generic snapshot is contextual only and cannot by
   // itself qualify this capability for profile promotion.
   await recordCapabilityEvidence({
@@ -4662,7 +4663,7 @@ ${evidence}
 
 
 
-    0;
+    0;
 
 
 
@@ -4670,31 +4671,31 @@ ${evidence}
 
 
 
-  for (
+  for (
 
 
 
-    const emerging of
+    const emerging of
 
 
 
-    reassessment
+    reassessment
 
 
 
-      .emergingCapabilities
+      .emergingCapabilities
 
 
 
-  ) {
+  ) {
 
 
 
-    const emergingName =
+    const emergingName =
 
 
 
-      emerging.name.trim();
+      emerging.name.trim();
 
 
 
@@ -4702,11 +4703,11 @@ ${evidence}
 
 
 
-    const emergingEvidence =
+    const emergingEvidence =
 
 
 
-      emerging.evidence.trim();
+      emerging.evidence.trim();
 
 
 
@@ -4714,27 +4715,27 @@ ${evidence}
 
 
 
-    if (
+    if (
 
 
 
-      !emergingName ||
+      !emergingName ||
 
 
 
-      !emergingEvidence
+      !emergingEvidence
 
 
 
-    ) {
+    ) {
 
 
 
-      continue;
+      continue;
 
 
 
-    }
+    }
 
 
 
@@ -4742,19 +4743,19 @@ ${evidence}
 
 
 
-    const emergingCanonical =
+    const emergingCanonical =
 
 
 
-      await findCompetency(
+      await findCompetency(
 
 
 
-        emergingName
+        emergingName
 
 
 
-      );
+      );
 
 
 
@@ -4762,27 +4763,27 @@ ${evidence}
 
 
 
-    const emergingCanonicalId =
+    const emergingCanonicalId =
 
 
 
-      emergingCanonical
+      emergingCanonical
 
 
 
-        ? String(
+        ? String(
 
 
 
-            emergingCanonical.id
+            emergingCanonical.id
 
 
 
-          )
+          )
 
 
 
-        : null;
+        : null;
 
 
 
@@ -4790,27 +4791,27 @@ ${evidence}
 
 
 
-    const stagedName =
+    const stagedName =
 
 
 
-      emergingCanonical
+      emergingCanonical
 
 
 
-        ? String(
+        ? String(
 
 
 
-            emergingCanonical.name
+            emergingCanonical.name
 
 
 
-          )
+          )
 
 
 
-        : emergingName;
+        : emergingName;
 
 
 
@@ -4818,19 +4819,19 @@ ${evidence}
 
 
 
-    const normalisedOriginalName =
+    const normalisedOriginalName =
 
 
 
-      normaliseCapabilityIdentity(
+      normaliseCapabilityIdentity(
 
 
 
-        emergingName
+        emergingName
 
 
 
-      );
+      );
 
 
 
@@ -4838,19 +4839,19 @@ ${evidence}
 
 
 
-    const normalisedStagedName =
+    const normalisedStagedName =
 
 
 
-      normaliseCapabilityIdentity(
+      normaliseCapabilityIdentity(
 
 
 
-        stagedName
+        stagedName
 
 
 
-      );
+      );
 
 
 
@@ -4858,67 +4859,67 @@ ${evidence}
 
 
 
-    if (
+    if (
 
 
 
-      (
+      (
 
 
 
-        emergingCanonicalId &&
+        emergingCanonicalId &&
 
 
 
-        canonicalIds.has(
+        canonicalIds.has(
 
 
 
-          emergingCanonicalId
+          emergingCanonicalId
 
 
 
-        )
+        )
 
 
 
-      ) ||
+      ) ||
 
 
 
-      names.has(
+      names.has(
 
 
 
-        normalisedOriginalName
+        normalisedOriginalName
 
 
 
-      ) ||
+      ) ||
 
 
 
-      names.has(
+      names.has(
 
 
 
-        normalisedStagedName
+        normalisedStagedName
 
 
 
-      )
+      )
 
 
 
-    ) {
+    ) {
 
 
 
-      continue;
+      continue;
 
 
 
-    }
+    }
 
 
 
@@ -4926,11 +4927,11 @@ ${evidence}
 
 
 
-    await stageCapability({
+    await stageCapability({
 
 
 
-      roleAssessmentId,
+      roleAssessmentId,
 
 
 
@@ -4938,11 +4939,11 @@ ${evidence}
 
 
 
-      competencyId:
+      competencyId:
 
 
 
-        emergingCanonicalId,
+        emergingCanonicalId,
 
 
 
@@ -4950,11 +4951,11 @@ ${evidence}
 
 
 
-      name:
+      name:
 
 
 
-        stagedName,
+        stagedName,
 
 
 
@@ -4962,11 +4963,11 @@ ${evidence}
 
 
 
-      sourceType:
+      sourceType:
 
 
 
-        "assessment",
+        "assessment",
 
 
 
@@ -4974,11 +4975,11 @@ ${evidence}
 
 
 
-      sourceSection:
+      sourceSection:
 
 
 
-        roleTitle,
+        roleTitle,
 
 
 
@@ -4986,11 +4987,11 @@ ${evidence}
 
 
 
-      evidence:
+      evidence:
 
 
 
-        emergingEvidence,
+        emergingEvidence,
 
 
 
@@ -4998,27 +4999,27 @@ ${evidence}
 
 
 
-      confidence:
+      confidence:
 
 
 
-        clamp(
+        clamp(
 
 
 
-          Number(
+          Number(
 
 
 
-            emerging.confidence
+            emerging.confidence
 
 
 
-          )
+          )
 
 
 
-        ),
+        ),
 
 
 
@@ -5026,11 +5027,11 @@ ${evidence}
 
 
 
-      demonstrated:
+      demonstrated:
 
 
 
-        true,
+        true,
 
 
 
@@ -5038,11 +5039,11 @@ ${evidence}
 
 
 
-      capabilityStatus:
+      capabilityStatus:
 
 
 
-        "demonstrated",
+        "demonstrated",
 
 
 
@@ -5050,15 +5051,15 @@ ${evidence}
 
 
 
-      assessmentStatus:
+      assessmentStatus:
 
 
 
-        "assessed",
+        "assessed",
 
 
 
-    });
+    });
 
 
 
@@ -5066,31 +5067,31 @@ ${evidence}
 
 
 
-    if (
+    if (
 
 
 
-      emergingCanonicalId
+      emergingCanonicalId
 
 
 
-    ) {
+    ) {
 
 
 
-      canonicalIds.add(
+      canonicalIds.add(
 
 
 
-        emergingCanonicalId
+        emergingCanonicalId
 
 
 
-      );
+      );
 
 
 
-    }
+    }
 
 
 
@@ -5098,15 +5099,15 @@ ${evidence}
 
 
 
-    names.add(
+    names.add(
 
 
 
-      normalisedOriginalName
+      normalisedOriginalName
 
 
 
-    );
+    );
 
 
 
@@ -5114,15 +5115,15 @@ ${evidence}
 
 
 
-    names.add(
+    names.add(
 
 
 
-      normalisedStagedName
+      normalisedStagedName
 
 
 
-    );
+    );
 
 
 
@@ -5130,11 +5131,11 @@ ${evidence}
 
 
 
-    emergingCapabilitiesStaged++;
+    emergingCapabilitiesStaged++;
 
 
 
-  }
+  }
 
 
 
@@ -5142,35 +5143,35 @@ ${evidence}
 
 
 
-  /*
+  /*
 
 
 
-    * Success-gate metadata comes only AFTER
+    * Success-gate metadata comes only AFTER
 
 
 
-    * the authoritative reassessment state
+    * the authoritative reassessment state
 
 
 
-    * has been persisted.
+    * has been persisted.
 
 
 
-   */
+   */
 
 
 
-  await recordSuccessGate({
+  await recordSuccessGate({
 
 
 
-    assessmentId,
+    assessmentId,
 
 
 
-    roleAssessmentId,
+    roleAssessmentId,
 
 
 
@@ -5178,11 +5179,11 @@ ${evidence}
 
 
 
-    gateKey:
+    gateKey:
 
 
 
-      "capability_review_completed",
+      "capability_review_completed",
 
 
 
@@ -5190,39 +5191,39 @@ ${evidence}
 
 
 
-    metadata: {
+    metadata: {
 
 
 
-      capabilityId,
+      capabilityId,
 
 
 
-      reviewStatus:
+      reviewStatus:
 
 
 
-        "edited",
+        "edited",
 
 
 
-      reassessmentOutcome:
+      reassessmentOutcome:
 
 
 
-        outcome,
+        outcome,
 
 
 
-      emergingCapabilitiesStaged,
+      emergingCapabilitiesStaged,
 
 
 
-    },
+    },
 
 
 
-  });
+  });
 
 
 
@@ -5230,47 +5231,47 @@ ${evidence}
 
 
 
-  /*
+  /*
 
 
 
-    * Mirror the accepted/rejected review
+    * Mirror the accepted/rejected review
 
 
 
-    * service behaviour.
+    * service behaviour.
 
 
 
-   *
+   *
 
 
 
-    * A demonstrated reassessment remains
+    * A demonstrated reassessment remains
 
 
 
-    * proposed, so it will keep this count
+    * proposed, so it will keep this count
 
 
 
-    * above zero until the candidate makes
+    * above zero until the candidate makes
 
 
 
-    * the subsequent Accept/Reject decision.
+    * the subsequent Accept/Reject decision.
 
 
 
-   */
+   */
 
 
 
-  const remainingReview =
+  const remainingReview =
 
 
 
-    await sql`
+    await sql`
 
 
 
@@ -5322,59 +5323,31 @@ ${evidence}
 
 
 
-  const remainingCount =
+  const remainingCount =
 
 
 
-    Number(
+    Number(
 
 
 
-      remainingReview
+      remainingReview
 
 
 
-        .rows[0]
+        .rows[0]
 
 
 
-        ?.count ||
+        ?.count ||
 
 
 
-        0
+        0
 
 
 
-    );
-
-
-
-
-
-
-
-  if (
-
-
-
-    remainingCount === 0
-
-
-
-  ) {
-
-
-
-    await recordSuccessGate({
-
-
-
-      assessmentId,
-
-
-
-      roleAssessmentId,
+    );
 
 
 
@@ -5382,19 +5355,47 @@ ${evidence}
 
 
 
-      gateKey:
+  if (
 
 
 
-        "all_demonstrated_capabilities_reviewed",
+    remainingCount === 0
 
 
 
-    });
+  ) {
 
 
 
-  }
+    await recordSuccessGate({
+
+
+
+      assessmentId,
+
+
+
+      roleAssessmentId,
+
+
+
+
+
+
+
+      gateKey:
+
+
+
+        "all_demonstrated_capabilities_reviewed",
+
+
+
+    });
+
+
+
+  }
 
 
 
@@ -6288,7 +6289,21 @@ export async function POST(
 
 
 
-      case "review_capability":
+      case "add_capability": {
+        await addCandidateCapability({
+          userId,
+          roleAssessmentId: body.roleAssessmentId,
+          name: body.competencyName,
+          evidence: body.evidence,
+        });
+        const role = await getRolePayload(body.roleAssessmentId);
+        return withCorrelationId(
+          NextResponse.json({ success: true, role, successGates: role.successGates }),
+          correlationId,
+        );
+      }
+
+      case "review_capability":
 
 
 

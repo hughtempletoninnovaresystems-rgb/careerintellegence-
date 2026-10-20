@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import type { CareerQueryClient } from "./query-client";
 import { getCareerSql } from "../db/career-sql";
 import type { AssessmentStatus, CapabilityStatus, Gap } from "../types";
 import { clamp } from "../utils";
@@ -18,6 +19,7 @@ export async function stageCapability({
   sourceQuestionId = null,
   sourceAnswerId = null,
   evidenceRelationshipType = "supporting",
+  client: transactionClient,
 }: {
   roleAssessmentId: string;
   competencyId?: string | null;
@@ -32,12 +34,14 @@ export async function stageCapability({
   sourceQuestionId?: string | null;
   sourceAnswerId?: string | null;
   evidenceRelationshipType?: CapabilityEvidenceRelationship;
+  client?: CareerQueryClient;
 }) {
-  const client = await sql.connect();
+  const ownedClient = transactionClient ? null : await sql.connect();
+  const client = transactionClient || ownedClient!;
   const query = getCareerSql(client);
 
   try {
-    await client.sql`BEGIN`;
+    if (ownedClient) await ownedClient.sql`BEGIN`;
     const result = await query`
       INSERT INTO career_role_capabilities (
         role_assessment_id,
@@ -95,25 +99,29 @@ export async function stageCapability({
       });
     }
 
-    await client.sql`COMMIT`;
+    if (ownedClient) await ownedClient.sql`COMMIT`;
     return capabilityId;
   } catch (error) {
-    try { await client.sql`ROLLBACK`; } catch { /* preserve original failure */ }
+    if (ownedClient) {
+      try { await ownedClient.sql`ROLLBACK`; } catch { /* preserve original failure */ }
+    }
     throw error;
   } finally {
-    client.release();
+    ownedClient?.release();
   }
 }
 
 export async function addClarificationRound(
   roleAssessmentId: string,
   gaps: Gap[],
+  client?: CareerQueryClient,
 ) {
   if (!gaps.length) {
     return;
   }
 
-  const roundResult = await sql`
+  const query = getCareerSql(client);
+  const roundResult = await query`
     SELECT COALESCE(MAX(round_no), 0) AS max_round
     FROM career_role_questions
     WHERE role_assessment_id=${roleAssessmentId}
@@ -122,7 +130,7 @@ export async function addClarificationRound(
   const roundNo = Number(roundResult.rows[0]?.max_round || 0) + 1;
 
   for (const gap of gaps) {
-    await sql`
+    await query`
       INSERT INTO career_role_questions (
         role_assessment_id,
         round_no,

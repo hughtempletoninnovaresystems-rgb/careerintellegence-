@@ -1,4 +1,6 @@
 import { sql } from "@vercel/postgres";
+import type { CareerQueryClient } from "../data/query-client";
+import { getCareerSql } from "../db/career-sql";
 import { generateValidatedJson } from "../ai/provider";
 import { evaluationListSchema } from "../ai/schemas";
 import { findCompetency, verifyRoleOwnership } from "../data/repository";
@@ -6,9 +8,11 @@ import { addClarificationRound, stageCapability } from "../data/staging";
 import {
   CAPABILITY_IDENTITY_RULES,
   EVIDENCE_ASSESSMENT_RULES,
+  CANDIDATE_OWNED_EVIDENCE_RULES,
+  ENRICHMENT_AND_REVIEW_RULES,
 } from "../domain/intelligence-contract";
 import { AIProviderError, CareerIntelligenceError } from "../errors";
-import { recordSuccessGate } from "../success-gates";
+import { recordSuccessGateAtomic } from "../success-gates";
 import type { Evaluation, Gap } from "../types";
 import { clamp } from "../utils";
 import { recordCapabilityEvidence } from "./provenance";
@@ -23,6 +27,7 @@ export type ClarificationAnswerInput = {
 type TrustedClarificationAnswer = ClarificationAnswerInput & {
   competency: string;
   question: string;
+  targetDefinitions: Array<{ identityRef: string; definitionRevision: number; definition: string }>;
 };
 
 type StagedCapabilityIdentity = {
@@ -42,6 +47,8 @@ You are assessing clarification evidence for a career role.
 
 ${CAPABILITY_IDENTITY_RULES}
 ${EVIDENCE_ASSESSMENT_RULES}
+${CANDIDATE_OWNED_EVIDENCE_RULES}
+${ENRICHMENT_AND_REVIEW_RULES}
 
 Return JSON only:
 
@@ -53,8 +60,8 @@ Return JSON only:
       "status": "demonstrated | gap | needs_clarification",
       "evidence": "evidence supported by the candidate answer",
       "confidence": 0.0,
-      "followUpQuestion": "optional follow-up",
-      "followUpReason": "optional reason",
+      "followUpQuestion": null,
+      "followUpReason": null,
       "emergingCapabilities": [
         {
           "name": "capability name",
@@ -69,8 +76,11 @@ Return JSON only:
 Rules:
 - Demonstrated requires meaningful evidence of what the person personally did.
 - A capability keyword alone is not sufficient evidence.
-- Gap means the answer does not establish demonstration and further questioning is not reasonably useful.
-- Needs clarification means there is a plausible signal but more evidence could establish it; provide a coherent follow-up question.
+- Gap is a legacy closed-unresolved outcome: no proven demonstration, NOT contradictory evidence, failure of competence, or automatic review acceptance.
+- Needs clarification means material missing personal evidence; provide BOTH substantive followUpQuestion and followUpReason strings.
+- Demonstrated and gap require JSON null (not omitted/empty) in BOTH follow-up fields.
+- Every evaluation must include emergingCapabilities (possibly []).
+- Keep questionId and competency exactly as supplied and assess against each target definition/revision. No silent identity remapping.
 - When an answer evidences an additional independently assessable capability, return it under emergingCapabilities.
 - Assess every supplied question independently even where one occupational episode supports several capabilities.
 - Do not invent evidence.
@@ -98,6 +108,7 @@ ${JSON.stringify(answers)}
   });
 
   const submittedIds = new Set(answers.map((answer) => answer.questionId));
+  const expectedNames = new Map(answers.map((answer) => [answer.questionId, answer.competency]));
   const evaluationById = new Map<string, Evaluation>();
 
   for (const evaluation of parsed.evaluations) {
@@ -110,8 +121,17 @@ ${JSON.stringify(answers)}
     }
 
     if (
+      normaliseCapabilityName(evaluation.competency) !==
+      normaliseCapabilityName(expectedNames.get(questionId) || "")
+    ) {
+      throw new AIProviderError(
+        "The AI assessment service changed a clarification target.",
+      );
+    }
+
+    if (
       evaluation.status === "needs_clarification" &&
-      !evaluation.followUpQuestion?.trim()
+      (!evaluation.followUpQuestion || !evaluation.followUpReason)
     ) {
       throw new AIProviderError(
         "The AI assessment service returned an incomplete clarification response.",
@@ -124,8 +144,8 @@ ${JSON.stringify(answers)}
       status: evaluation.status,
       evidence: evaluation.evidence.trim(),
       confidence: evaluation.confidence,
-      followUpQuestion: evaluation.followUpQuestion?.trim() || undefined,
-      followUpReason: evaluation.followUpReason?.trim() || undefined,
+      followUpQuestion: evaluation.followUpQuestion,
+      followUpReason: evaluation.followUpReason,
       emergingCapabilities: evaluation.emergingCapabilities.map((capability) => ({
         name: capability.name.trim(),
         evidence: capability.evidence.trim(),
@@ -165,8 +185,10 @@ function normaliseCapabilityName(value: string) {
 
 async function loadStagedCapabilityIdentities(
   roleAssessmentId: string,
+  client?: CareerQueryClient,
 ): Promise<StagedCapabilityIdentity[]> {
-  const result = await sql`
+  const query = getCareerSql(client);
+  const result = await query`
     SELECT
       id,
       canonical_competency_id,
@@ -282,9 +304,34 @@ export async function assessRoleClarifications({
       competency: String(question.competency || ""),
       question: String(question.question || ""),
       answer: answer.answer.trim(),
+      targetDefinitions: [],
     });
   }
 
+  // Legacy records have a revision of the capability ROW, not an approved
+  // occupational definition revision. Do not present the name as a frozen
+  // revised-IC definition. This mapping is contextual until schema sign-off.
+  const targetTable = await sql`
+    SELECT to_regclass('public.career_question_capability_targets') AS relation
+  `;
+  if (targetTable.rows[0]?.relation) {
+    const targets = await sql`
+      SELECT t.question_id, t.role_capability_id, crc.revision_no,
+        COALESCE(NULLIF(TRIM(crc.edited_competency_name), ''), crc.proposed_competency_name) AS effective_name
+      FROM career_question_capability_targets t
+      JOIN career_role_capabilities crc ON crc.id=t.role_capability_id
+      WHERE crc.role_assessment_id=${roleAssessmentId}
+    `;
+    for (const item of trustedAnswers) {
+      item.targetDefinitions = targets.rows
+        .filter((row) => String(row.question_id) === item.questionId)
+        .map((row) => ({
+          identityRef: String(row.role_capability_id),
+          definitionRevision: Number(row.revision_no),
+          definition: String(row.effective_name || ''),
+        }));
+    }
+  }
   const role = await loadRoleAssessmentSnapshot(roleAssessmentId);
   const evaluations = await evaluateAnswers(role, trustedAnswers);
   const followUps: Gap[] = [];
@@ -296,14 +343,43 @@ export async function assessRoleClarifications({
    * emerging intelligence from later evaluations cannot create duplicate
    * staged identities during the same request.
    */
-  const stagedCapabilities =
-    await loadStagedCapabilityIdentities(roleAssessmentId);
+  let openCount = 0;
+  const client = await sql.connect();
+  const query = getCareerSql(client);
+  try {
+    await client.sql`BEGIN`;
+    // Serialise clarification writes per role. Confirm ownership and all
+    // question states again after waiting for the lock (stale-safe retry).
+    const lockedRole = await query`
+      SELECT cra.id FROM career_role_assessments cra
+      JOIN career_assessments ca ON ca.id=cra.assessment_id
+      WHERE cra.id=${roleAssessmentId} AND ca.user_id=${userId}
+        AND cra.lifecycle_status IN ('in_progress', 'review_ready')
+      FOR UPDATE OF cra
+    `;
+    if (!lockedRole.rows.length) {
+      throw new CareerIntelligenceError("This role is not available for clarification.",
+        { status: 409, code: "clarification_role_conflict", expose: true });
+    }
+    const currentOpen = await query`
+      SELECT id FROM career_role_questions
+      WHERE role_assessment_id=${roleAssessmentId} AND status='open'
+      FOR UPDATE
+    `;
+    const openIds = new Set(currentOpen.rows.map((row) => String(row.id)));
+    if (trustedAnswers.some((answer) => !openIds.has(answer.questionId))) {
+      throw new CareerIntelligenceError("A question has already been answered. Reload this role.",
+        { status: 409, code: "clarification_question_conflict", expose: true });
+    }
+
+    const stagedCapabilities =
+      await loadStagedCapabilityIdentities(roleAssessmentId, client);
 
   for (let index = 0; index < trustedAnswers.length; index += 1) {
     const answer = trustedAnswers[index];
     const evaluation = evaluations[index];
 
-    await sql`
+    await query`
       UPDATE career_role_questions
       SET status='answered', updated_at=NOW()
       WHERE id=${answer.questionId}
@@ -311,7 +387,7 @@ export async function assessRoleClarifications({
         AND status='open'
     `;
 
-    const savedAnswer = await sql`
+    const savedAnswer = await query`
       INSERT INTO career_role_answers (
         question_id,
         role_assessment_id,
@@ -346,7 +422,7 @@ export async function assessRoleClarifications({
       evaluation.competency || answer.competency;
 
     const canonical =
-      await findCompetency(capabilityName);
+      await findCompetency(capabilityName, client);
 
     const canonicalCompetencyId =
       canonical ? String(canonical.id) : null;
@@ -369,7 +445,7 @@ export async function assessRoleClarifications({
 
     if (evaluation.status === "demonstrated") {
       if (existingSignal) {
-        await sql`
+        await query`
           UPDATE career_role_capabilities
           SET
             canonical_competency_id=COALESCE(
@@ -389,6 +465,7 @@ export async function assessRoleClarifications({
 
         await recordCapabilityEvidence({
           roleAssessmentId,
+          client,
           roleCapabilityId: existingSignal.id,
           sourceType: "clarification_answer",
           evidenceText: evaluation.evidence,
@@ -412,6 +489,7 @@ export async function assessRoleClarifications({
       } else {
         const capabilityId = await stageCapability({
           roleAssessmentId,
+          client,
           competencyId: canonicalCompetencyId,
           name: effectiveCapabilityName,
           sourceType: "clarification",
@@ -440,7 +518,7 @@ export async function assessRoleClarifications({
 
     if (evaluation.status === "gap") {
       if (existingSignal) {
-        await sql`
+        await query`
           UPDATE career_role_capabilities
           SET
             canonical_competency_id=COALESCE(
@@ -451,8 +529,8 @@ export async function assessRoleClarifications({
             ai_confidence=${clamp(evaluation.confidence)},
             demonstrated=FALSE,
             capability_status='gap',
-            assessment_status='assessed',
-            review_status='accepted',
+            assessment_status='needs_clarification',
+            review_status='proposed',
             updated_at=NOW()
           WHERE id=${existingSignal.id}
             AND role_assessment_id=${roleAssessmentId}
@@ -460,12 +538,13 @@ export async function assessRoleClarifications({
 
         await recordCapabilityEvidence({
           roleAssessmentId,
+          client,
           roleCapabilityId: existingSignal.id,
           sourceType: "clarification_answer",
           evidenceText: evaluation.evidence,
           sourceQuestionId: answer.questionId,
           sourceAnswerId,
-          relationshipType: "contradictory",
+          relationshipType: "context",
           provenance: {
             evaluationStatus: evaluation.status,
             confidence: clamp(evaluation.confidence),
@@ -478,15 +557,12 @@ export async function assessRoleClarifications({
 
         existingSignal.name = effectiveCapabilityName;
         existingSignal.capabilityStatus = "gap";
-        existingSignal.assessmentStatus = "assessed";
+        existingSignal.assessmentStatus = "needs_clarification";
       } else {
-        /*
-         * stageCapability() deliberately defaults review_status to proposed.
-         * A confirmed gap is already accepted by the clarification lifecycle,
-         * so set it to accepted immediately after insertion.
-         */
+        /* An unresolved answer is never automatically accepted as a reviewed competence gap. */
         const capabilityId = await stageCapability({
           roleAssessmentId,
+          client,
           competencyId: canonicalCompetencyId,
           name: effectiveCapabilityName,
           sourceType: "clarification",
@@ -495,28 +571,19 @@ export async function assessRoleClarifications({
           confidence: evaluation.confidence,
           sourceQuestionId: answer.questionId,
           sourceAnswerId,
-          evidenceRelationshipType: "contradictory",
+          evidenceRelationshipType: "context",
           demonstrated: false,
           capabilityStatus: "gap",
-          assessmentStatus: "assessed",
+          assessmentStatus: "needs_clarification",
         });
 
         if (capabilityId) {
-          await sql`
-            UPDATE career_role_capabilities
-            SET
-              review_status='accepted',
-              updated_at=NOW()
-            WHERE id=${capabilityId}
-              AND role_assessment_id=${roleAssessmentId}
-          `;
-
           stagedCapabilities.push({
             id: capabilityId,
             canonicalCompetencyId,
             name: effectiveCapabilityName,
             capabilityStatus: "gap",
-            assessmentStatus: "assessed",
+            assessmentStatus: "needs_clarification",
           });
         }
       }
@@ -530,8 +597,7 @@ export async function assessRoleClarifications({
       followUps.push({
         competency: effectiveCapabilityName,
         reason:
-          evaluation.followUpReason ||
-          "Further evidence is required.",
+          evaluation.followUpReason!,
         question: evaluation.followUpQuestion!,
       });
     }
@@ -542,7 +608,7 @@ export async function assessRoleClarifications({
      */
     for (const emerging of evaluation.emergingCapabilities || []) {
       const mapped =
-        await findCompetency(emerging.name);
+        await findCompetency(emerging.name, client);
 
       const mappedCompetencyId =
         mapped ? String(mapped.id) : null;
@@ -557,11 +623,26 @@ export async function assessRoleClarifications({
       );
 
       if (existingEmerging) {
+        // A repeated identity still gains a new attributable source record.
+        // It is contextual until the emerging ability is assessed separately.
+        await recordCapabilityEvidence({
+          client,
+          roleAssessmentId,
+          roleCapabilityId: existingEmerging.id,
+          sourceType: "clarification_answer",
+          evidenceText: emerging.evidence,
+          sourceQuestionId: answer.questionId,
+          sourceAnswerId,
+          relationshipType: "context",
+          supersedeCurrent: false,
+          provenance: { emergingSignal: true, assessmentRequired: true },
+        });
         continue;
       }
 
       const capabilityId = await stageCapability({
         roleAssessmentId,
+        client,
         competencyId: mappedCompetencyId,
         name: emergingName,
         sourceType: "clarification",
@@ -571,9 +652,9 @@ export async function assessRoleClarifications({
         sourceQuestionId: answer.questionId,
         sourceAnswerId,
         evidenceRelationshipType: "supporting",
-        demonstrated: true,
-        capabilityStatus: "demonstrated",
-        assessmentStatus: "assessed",
+        demonstrated: null,
+        capabilityStatus: "signal",
+        assessmentStatus: "proposed",
       });
 
       if (capabilityId) {
@@ -581,41 +662,50 @@ export async function assessRoleClarifications({
           id: capabilityId,
           canonicalCompetencyId: mappedCompetencyId,
           name: emergingName,
-          capabilityStatus: "demonstrated",
-          assessmentStatus: "assessed",
+          capabilityStatus: "signal",
+          assessmentStatus: "proposed",
         });
       }
     }
   }
 
-  await addClarificationRound(roleAssessmentId, followUps);
+  await addClarificationRound(roleAssessmentId, followUps, client);
 
-  await recordSuccessGate({
+  await recordSuccessGateAtomic(client, {
     assessmentId,
     roleAssessmentId,
     gateKey: "clarification_evaluation_completed",
   });
 
-  const remaining = await sql`
+  const remaining = await query`
     SELECT COUNT(*)::int AS count
     FROM career_role_questions
     WHERE role_assessment_id=${roleAssessmentId}
       AND status='open'
   `;
 
-  const openCount = Number(remaining.rows[0]?.count || 0);
+  openCount = Number(remaining.rows[0]?.count || 0);
 
   await transitionRoleLifecycle({
+    client,
     roleAssessmentId,
     to: openCount > 0 ? "in_progress" : "review_ready",
   });
 
   if (openCount === 0) {
-    await recordSuccessGate({
+    await recordSuccessGateAtomic(client, {
       assessmentId,
       roleAssessmentId,
       gateKey: "clarification_completed",
     });
+  }
+
+    await client.sql`COMMIT`;
+  } catch (error) {
+    try { await client.sql`ROLLBACK`; } catch { /* retain original failure */ }
+    throw error;
+  } finally {
+    client.release();
   }
 
   return {

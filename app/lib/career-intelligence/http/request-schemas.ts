@@ -29,6 +29,12 @@ const cvRoleContextFields = {
 
 export const analyseCvActionSchema = z.discriminatedUnion("action", [
   z.object({
+    action: z.literal("add_capability"),
+    roleAssessmentId,
+    competencyName: shortText.min(1),
+    evidence: evidenceText.trim().min(1),
+  }).passthrough(),
+  z.object({
     action: z.literal("assess_role"),
     roleAssessmentId,
     questions: z.array(clarificationAnswer).min(1).max(50),
@@ -70,6 +76,12 @@ const manualRoleSchema = z.object({
 });
 
 export const noCvActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("add_capability"),
+    roleAssessmentId,
+    competencyName: shortText.min(1),
+    evidence: evidenceText.trim().min(1),
+  }).passthrough(),
   z.object({
     action: z.literal("start_manual"),
     candidateName: shortText.optional(),
