@@ -7,17 +7,19 @@ Career Intelligence is a Next.js App Router prototype being restructured toward 
 - Next.js 14 / React 18
 - NextAuth v5 credentials authentication
 - Vercel PostgreSQL (`@vercel/postgres`)
-- Gemini through `@google/genai`
+- OpenAI Responses API: `gpt-6.1-sol`, reasoning effort `medium`
 - PDF/DOCX text extraction using `pdf-extraction` and `mammoth`
 
 ## Local setup
 
 1. Install the locked dependencies with `npm ci`.
 2. Configure the development database and authentication environment required by the existing Vercel/NextAuth setup.
-3. Configure `GEMINI_API_KEY` as a server-side secret. Do not expose it through client-side environment variables.
+3. Configure `OPENAI_API_KEY` as a server-side secret. Do not expose it through client-side environment variables. All AI prompts share the pinned OpenAI model and reasoning settings in `app/lib/career-intelligence/config.ts`; legacy Gemini/model environment variables do not override them.
 4. Run `npm run dev`.
 
 Optional Career Intelligence operational configuration is documented in `docs/career-intelligence/BASELINE_RESTRUCTURE.md`.
+
+The current three-run protocol is in `docs/career-intelligence/OPENAI_MATCHED_RUNS.md`.
 
 ## Quality commands
 

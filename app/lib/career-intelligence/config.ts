@@ -9,7 +9,9 @@ function positiveInteger(value: string | undefined, fallback: number) {
 }
 
 export const careerIntelligenceConfig = {
-  aiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+  aiProvider: "openai" as const,
+  aiModel: "gpt-6.1-sol",
+  aiReasoningEffort: "medium" as const,
   aiTimeoutMs: positiveInteger(process.env.CAREER_AI_TIMEOUT_MS, 45_000),
   maxCvFileBytes: positiveInteger(
     process.env.CAREER_CV_MAX_FILE_BYTES,

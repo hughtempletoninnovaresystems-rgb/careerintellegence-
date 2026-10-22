@@ -1,8 +1,9 @@
-/** Experimental adapter. Requires explicit pilot flags and never enables itself. */
+/** Shared OpenAI Responses adapter for all assessment prompts. */
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { revisedAIEnvelopeProviderSchema } from "./revised-contract";
 import { AIProviderError } from "../errors";
+import { careerIntelligenceConfig } from "../config";
 
 let openai: OpenAI | undefined;
 const string = { type: "string" };
@@ -36,13 +37,12 @@ const clarificationSchema = {
 export async function generateOpenAIJson(input: {
   model: string; prompt: string; timeoutMs: number; operation?: string | null;
 }) {
-  if (process.env.CAREER_OPENAI_PILOT_ENABLED !== "true" || process.env.CAREER_REVISED_PILOT_ENABLED !== "true")
-    throw new AIProviderError("The OpenAI pilot is not enabled.");
   if (!process.env.OPENAI_API_KEY || !input.model)
-    throw new AIProviderError("The OpenAI pilot configuration is incomplete.");
+    throw new AIProviderError("The OpenAI assessment configuration is incomplete.");
   openai ||= new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: input.timeoutMs, maxRetries: 0 });
   const response = await openai.responses.create({
     model: input.model,
+    reasoning: { effort: careerIntelligenceConfig.aiReasoningEffort },
     input: input.prompt,
     text: { format: input.operation === "revised_ic_preview"
       ? zodTextFormat(revisedAIEnvelopeProviderSchema, "career_revised_preview")
@@ -51,7 +51,7 @@ export async function generateOpenAIJson(input: {
         : { type: "json_object" as const },
     },
     store: false,
-  });
+  }, { timeout: input.timeoutMs });
   if (response.status !== "completed" || !response.output_text?.trim())
     throw new AIProviderError("The AI assessment service did not return a complete result.");
   return { outputText: response.output_text, actualModel: response.model || null };

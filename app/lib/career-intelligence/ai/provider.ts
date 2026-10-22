@@ -1,49 +1,10 @@
 import { createHash } from "node:crypto";
 import { sql } from "@vercel/postgres";
-import { GoogleGenAI } from "@google/genai";
 import type { ZodType } from "zod";
 import { AIProviderError } from "../errors";
 import { careerIntelligenceConfig } from "../config";
-import { geminiText } from "../utils";
 import { AIOutputValidationError, parseValidatedJson } from "./parse-json";
 import { generateOpenAIJson } from "./openai-adapter";
-
-let client: GoogleGenAI | null = null;
-
-function getClient() {
-  if (client) {
-    return client;
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new AIProviderError("The AI assessment service is not configured.");
-  }
-
-  client = new GoogleGenAI({ apiKey });
-  return client;
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new AIProviderError("The AI assessment service timed out.")),
-          timeoutMs,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
-}
 
 type AIInvocationContext = {
   assessmentId?: string | null;
@@ -53,12 +14,6 @@ type AIInvocationContext = {
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function actualModelVersion(response: unknown): string | null {
-  if (!response || typeof response !== "object") return null;
-  const value = (response as { modelVersion?: unknown }).modelVersion;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function recordAIInvocation({
@@ -72,7 +27,7 @@ async function recordAIInvocation({
   elapsedMs,
   context,
 }: {
-  provider: "google" | "openai";
+  provider: "openai";
   requestedModel: string;
   actualModel: string | null;
   promptHash: string;
@@ -117,30 +72,16 @@ async function recordAIInvocation({
 export async function generateValidatedJson<T>({
   prompt,
   schema,
-  model = careerIntelligenceConfig.aiModel,
   timeoutMs = careerIntelligenceConfig.aiTimeoutMs,
   context,
-  pilotProvider,
 }: {
   prompt: string;
   schema: ZodType<T>;
-  model?: string;
   timeoutMs?: number;
   context?: AIInvocationContext;
-  pilotProvider?: "google" | "openai";
 }): Promise<T> {
-  // Only explicitly configured pilots may use OpenAI. The provider switch
-  // NEVER occurs merely because the adapter is deployed.
-  const provider = pilotProvider || "google";
-  if (provider === "openai" && (
-    context?.operation !== "revised_ic_preview" ||
-    process.env.CAREER_OPENAI_PILOT_ENABLED !== "true" ||
-    process.env.CAREER_REVISED_PILOT_ENABLED !== "true"
-  )) {
-    throw new AIProviderError("The OpenAI preview is not authorised.");
-  }
-  const requestedModel = provider === "openai" ? process.env.OPENAI_MODEL : model;
-  if (!requestedModel) throw new AIProviderError("The chosen AI model is not configured.");
+  const provider = careerIntelligenceConfig.aiProvider;
+  const requestedModel = careerIntelligenceConfig.aiModel;
   // At most two generation attempts. Each attempt is separately audited.
   let retryHint = "";
 
@@ -152,25 +93,12 @@ export async function generateValidatedJson<T>({
     let actualModel: string | null = null;
 
     try {
-      if (provider === "openai") {
-        const output = await generateOpenAIJson({
-          model: requestedModel, prompt: attemptPrompt, timeoutMs,
-          operation: context?.operation,
-        });
-        outputText = output.outputText;
-        actualModel = output.actualModel;
-      } else {
-        const response = await withTimeout(
-          getClient().models.generateContent({
-            model: requestedModel,
-            contents: attemptPrompt,
-            config: { responseMimeType: "application/json" },
-          }),
-          timeoutMs,
-        );
-        outputText = geminiText(response);
-        actualModel = actualModelVersion(response);
-      }
+      const output = await generateOpenAIJson({
+        model: requestedModel, prompt: attemptPrompt, timeoutMs,
+        operation: context?.operation,
+      });
+      outputText = output.outputText;
+      actualModel = output.actualModel;
     } catch (error) {
       try {
         await recordAIInvocation({

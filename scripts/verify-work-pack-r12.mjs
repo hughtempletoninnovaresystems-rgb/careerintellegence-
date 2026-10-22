@@ -23,8 +23,13 @@ for (const fragment of [
 ]) assert.ok(clarification.includes(fragment), fragment);
 assert.ok(!clarification.includes("review_status='accepted'"), 'auto accepted gap');
 const provider = read('app/lib/career-intelligence/ai/provider.ts');
-assert.match(provider, /pilotProvider \|\| "google"/, 'Production default must remain Google');
-assert.match(provider, /context\?\.operation !== "revised_ic_preview"/);
+assert.match(provider, /const provider = careerIntelligenceConfig.aiProvider/);
+assert.doesNotMatch(provider, /GoogleGenAI|pilotProvider/, 'Every prompt must use the shared OpenAI configuration');
+const config = read('app/lib/career-intelligence/config.ts');
+assert.match(config, /aiProvider: "openai"/);
+assert.match(config, /aiModel: "gpt-6\.1-sol"/);
+assert.match(config, /aiReasoningEffort: "medium"/);
+assert.match(read('app/lib/career-intelligence/services/revised-pilot.ts'), /CAREER_REVISED_PILOT_ENABLED/);
 assert.match(read('app/lib/career-intelligence/ai/schemas.ts'), /followUpQuestion: z\.string\(\)\.trim\(\)\.min\(1\)\.max\(5_000\)\.nullable\(\)/);
 assert.match(read('app/ui/dashboard/cvupload.tsx'), /useCareerProcessing\(\)/);
 assert.match(read('app/lib/career-intelligence/services/role-submission.ts'), /unresolved_evidence_review_required/);

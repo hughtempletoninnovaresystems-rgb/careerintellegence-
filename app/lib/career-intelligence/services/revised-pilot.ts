@@ -29,10 +29,9 @@ export type FrozenPilotInput = {
 };
 
 export async function runRevisedIntelligencePreview({
-  input, provider = "google", runReference,
+  input, runReference,
 }: {
   input: FrozenPilotInput;
-  provider?: "google" | "openai";
   runReference: string;
 }): Promise<RevisedAIEnvelope> {
   if (process.env.CAREER_REVISED_PILOT_ENABLED !== "true") {
@@ -56,7 +55,6 @@ Trusted input bundle:\n${JSON.stringify(input)}`;
   const output = await generateValidatedJson({
     prompt,
     schema: revisedAIEnvelopeSchema,
-    pilotProvider: provider,
     context: { operation: "revised_ic_preview" },
   });
   if (output.runReference !== runReference) throw new Error("Pilot run reference mismatch.");
